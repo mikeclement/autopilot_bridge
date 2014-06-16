@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<package>
+  <name>autopilot_bridge</name>
+  <version>0.0.1</version>
+  <description>ROS package to communicate with autopilots. Originally inspired by https://github.com/cberzan/roscopter/</description>
+
+  <maintainer email="mrclemen@nps.edu">Mike Clement</maintainer>
+
+  <license>Free</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  
+  <build_depend>rospy</build_depend>
+  <build_depend>rosmsg</build_depend>
+  <build_depend>message_generation</build_depend>
+  <build_depend>std_msgs</build_depend>
+  <build_depend>sensor_msgs</build_depend>
+  <build_depend>geometry_msgs</build_depend> 
+  
+  <run_depend>rospy</run_depend>
+  <run_depend>rosmsg</run_depend>
+  <run_depend>message_runtime</run_depend>
+
+</package>
