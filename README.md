@@ -25,15 +25,28 @@ From the base workspace folder, run
 
 To run the bridge, first start roscore, then run
 
-	rosrun autopilot_bridge mavlink.py
+	rosrun autopilot_bridge mavbridge.py
 
 You can specify --help at the end of the command to see all options.
 
 To run over serial device /dev/ttyS3 at 57600 baud:
 
-	rosrun autopilot_bridge mavlink.py --device /dev/ttyS3 --baudrate 57600
+	rosrun autopilot_bridge mavbridge.py --device /dev/ttyS3 --baudrate 57600
 
 To run over a TCP connection to a Simulation-In-The-Loop (SITL) instance:
 
-	rosrun autopilot_bridge mavlink.py --device tcp:127.0.0.1:5762
+	rosrun autopilot_bridge mavbridge.py --device tcp:127.0.0.1:5762
+
+## Extensibility
+
+One can easily write additional modules with other ROS publishers, subscribers, and services
+(service support is under development).
+Modules must contain the function init(), which accepts as its sole argument
+a MAVLinkBridge instance.
+init() uses this instance to register callbacks for ROS subscriptions and MAVLink messages,
+as well as to access some supporting API calls.
+
+See the file src/mavbridge_acs.py for an example.
+
+See the file src/mavbridge_core.py for available API support.
 
