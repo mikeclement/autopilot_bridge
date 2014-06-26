@@ -94,7 +94,7 @@ def set_system_time(epoch_usec):
         return
     secs = int(epoch_usec / 1e06)
     nsecs = (epoch_usec % 1e06) * 1e03
-    res = os.system("date -s '@%u.%u'" % (secs, nsecs))
+    res = os.system("sudo date -s '@%u.%u'" % (secs, nsecs))
     if res != 0:
         log_warn("Could not set system time, using saved system time")
 
@@ -156,7 +156,7 @@ def mavlink_setup(device, baudrate, skip_time_hack):
 def mavlink_sensor_health(bits):
     present = master.field('SYS_STATUS', 'onboard_control_sensors_enabled', 0)
     present = ((present & bits) == bits)
-    healthy = master.field('SYS_STATUS', 'onboard_control_sensors_healthy', 0)
+    healthy = master.field('SYS_STATUS', 'onboard_control_sensors_health', 0)
     healthy = ((healthy & bits) == bits)
     return (present and healthy)
 
