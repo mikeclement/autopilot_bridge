@@ -54,8 +54,7 @@ def sub_change_mode(message, bridge):
     if message.data in mav_map:
         bridge.master.set_mode(mav_map[message.data])
     else:
-        # TODO expose rospy.logwarn from bridge
-        print "sub_change_mode: invalid mode "  + message.data
+        raise Exception("invalid mode " + message.data)
 
 # Purpose: Go to a lat/lon/alt in GUIDED mode
 # Fields: 

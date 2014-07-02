@@ -110,7 +110,9 @@ class MAVLinkBridge(object):
     # Get a ROS publisher for a given topic (within basename) and message type
     # If matching publisher exists, it is returned; otherwise it is created.
     # Enforces one message type per topic
-    def get_ros_pub(self, topic, topic_type):
+    # NOTE: Can pass optional args to rospy.Publisher() in *pub_args;
+    #  of course, all users of the publisher will be subject to same options
+    def get_ros_pub(self, topic, topic_type, *pub_args):
         if topic in self.registered_pubs:
             (t_type, t_pub) = self.registered_pubs[topic]
             if t_type == topic_type:
@@ -119,7 +121,7 @@ class MAVLinkBridge(object):
                 raise Exception("topic '%s' already registered with a different type" % topic)
         else:
             try:
-                pub = rospy.Publisher("%s/%s"%(self.basename, topic), topic_type)
+                pub = rospy.Publisher("%s/%s"%(self.basename, topic), topic_type, *pub_args)
                 self.registered_pubs[topic] = (topic_type, pub)
                 return pub
             except Exception as ex:
@@ -139,21 +141,24 @@ class MAVLinkBridge(object):
     # Add a callback that triggers on receipt of a ROS topic message
     # Callback should be of the form:
     #   foo(message, bridge_object)
-    def add_ros_sub_event(self, topic, topic_type, callback):
-        def cb_wrapper(msg, cb):
-            try:
-                cb(msg, self)
-                rospy.loginfo("ROS sub recvd: %s" % topic)
-            except Exception as ex:
-                rospy.logwarn("ROS sub error (%s): %s" % (topic, ex.args[0]))
-            return True
+    # NOTE: Can pass optional args to rospy.Subscriber() in *sub_args
+    def add_ros_sub_event(self, topic, topic_type, callback, *sub_args):
         if topic in self.ros_sub_events:
             raise Exception("topic '%s' already has a subscriber" % topic)
         else:
+            # This creates a closure with 'topic', 'callback', etc inside
+            def callback_wrapper(msg):
+                try:
+                    callback(msg, self)
+                    rospy.loginfo("ROS sub recvd: %s" % topic)
+                except Exception as ex:
+                    rospy.logwarn("ROS sub error (%s): %s" % (topic, ex.args[0]))
+                return True
             self.ros_sub_events[topic] = \
                 rospy.Subscriber("%s/%s"%(self.basename, topic),
                                  topic_type,
-                                 lambda msg: cb_wrapper(msg, callback))
+                                 callback_wrapper,
+                                 *sub_args)
 
     # Add a callback that triggers periodically
     # Callback should be of the form:

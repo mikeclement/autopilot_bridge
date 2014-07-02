@@ -27,6 +27,7 @@ import autopilot_bridge.msg as apmsg
 mode_mav_to_enum = { 'RTL' : apmsg.Status.MODE_RALLY,
                      'MANUAL' : apmsg.Status.MODE_MANUAL,
                      'FBWA' : apmsg.Status.MODE_FBW,
+                     'GUIDED' : apmsg.Status.MODE_GUIDED,
                      'AUTO' : apmsg.Status.MODE_AUTO }
 mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
 
@@ -75,6 +76,23 @@ def sub_heartbeat(message, bridge):
         0, # TODO make sure it doesn't need to be: ap_last_custom_mode,
         mavutil.mavlink.MAV_STATE_ACTIVE)
 
+# Purpose: Initiate barometer calibration
+# Fields: None
+def sub_calpress(message, bridge):
+    bridge.master.calibrate_pressure()
+
+# Purpose: Changes autopilot mode
+# (must be in mode_mapping dictionary)
+# Fields:
+# .data - index from mode_mav_to_enum
+def sub_change_mode(message, bridge):
+    mav_map = bridge.master.mode_mapping()
+    if message.data in mode_enum_to_mav and \
+        mode_enum_to_mav[message.data] in mav_map:
+        bridge.master.set_mode(mav_map[mode_enum_to_mav[message.data]])
+    else:
+        raise Exception("invalid mode %u" % message.data)
+
 # Purpose: Initiates landing
 # NOTE: Not yet supported in MAVLink master branch
 # Fields: None
@@ -105,6 +123,8 @@ def sub_landing_abort(message, bridge):
 def init(bridge):
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
     bridge.add_ros_sub_event("heartbeat", stdmsg.Empty, sub_heartbeat)
+    bridge.add_ros_sub_event("calpress", stdmsg.Empty, sub_calpress)
+    bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
     bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)
     bridge.add_ros_sub_event("land_abort", stdmsg.UInt16, sub_landing_abort)
     return True
