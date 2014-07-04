@@ -122,7 +122,7 @@ def sub_landing_abort(message, bridge):
 
 def init(bridge):
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
-    bridge.add_ros_sub_event("heartbeat", stdmsg.Empty, sub_heartbeat)
+    bridge.add_ros_sub_event("heartbeat", apmsg.Heartbeat, sub_heartbeat)
     bridge.add_ros_sub_event("calpress", stdmsg.Empty, sub_calpress)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
     bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)
