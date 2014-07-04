@@ -16,6 +16,11 @@ add_message_files(
   Status.msg
 )
 
+add_service_files(
+  FILES
+  Param.srv
+)
+
 generate_messages(
   DEPENDENCIES 
   std_msgs 

@@ -51,9 +51,9 @@ class MAVLinkBridge(object):
         self.master = None
         self.mav_events = {}
         self.ros_sub_events = {}
-        self.ap_time_delta = rospy.Duration(0, 0)
+        self.ros_srv_events = {}
         self.registered_pubs = {}
-        self.registered_subs = {}
+        self.ap_time_delta = rospy.Duration(0, 0)
 
         # Initialize ROS node
         try:
@@ -160,6 +160,31 @@ class MAVLinkBridge(object):
                                  callback_wrapper,
                                  *sub_args)
 
+    # Add a callback that triggers on receipt of a ROS service request
+    # Callback should be of the form:
+    #   foo(request, bridge_object)
+    # NOTE: Can pass optional args to rospy.Service() in *srv_args
+    def add_ros_srv_event(self, srv_name, srv_type, callback, *srv_args):
+        if srv_name in self.ros_srv_events:
+            raise Exception("service '%s' is already defined" % srv_name)
+        else:
+            # This creates a closure and adds some queueing logic
+            def callback_wrapper(req):
+                try:
+                    # TODO: Add queueing logic to prevent service calls
+                    #  from stepping on each other
+                    rospy.loginfo("ROS srv recvd: %s" % srv_name)
+                    return callback(req, self)
+                except Exception as ex:
+                    rospy.logwarn("ROS srv error (%s): %s" % (srv_name, ex.args[0]))
+                # TODO: return something the caller can handle
+                return True
+            self.ros_srv_events[srv_name] = \
+                rospy.Service("%s/%s"%(self.basename, srv_name),
+                              srv_type,
+                              callback_wrapper,
+                              *srv_args)
+
     # Add a callback that triggers periodically
     # Callback should be of the form:
     #   TODO
@@ -236,7 +261,8 @@ class MAVLinkBridge(object):
                         try:
                             ev(msg_type, msg, self)
                         except Exception as ex:
-                            rospy.logwarn("MAVLink event error: " + ex.args[0])
+                            rospy.logwarn("MAVLink event error (%s): %s" % \
+                                          (msg_type, ex.args[0]))
 
                 # If you *really* want to see what's coming out of mavlink
                 if self.spam_mavlink:

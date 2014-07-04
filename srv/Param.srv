@@ -1,0 +1,5 @@
+string name
+float64 value
+---
+bool ok
+float64 value
