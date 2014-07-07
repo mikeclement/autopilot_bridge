@@ -25,14 +25,27 @@ import sys
 # Class to access mavlink params from ROS
 
 class mavbridge_param(object):
-    def __init__(self, master):
+    def __init__(self, master, use_cache=False):
         self.master = master
         self.params = {}
+
+        # If using the cache instead of always re-fetching params
+        # NOTE: In some cases, the autopilot may not broadcast updated params
+        #  when another system (like a GCS instance) changes a value; hence
+        #  DON'T use caching unless you know it works in your case.
+        self.use_cache=use_cache
         self.param_highest = -1
         self.initial_fetch_done = False
+        if use_cache:
+            # Start a fetch of all params
+            self.master.param_fetch_all()
 
-        # Start a fetch of all params
-        self.master.param_fetch_all()
+    # If a value is in the cache, make it None (so a 'get' must refetch it)
+    def _noneify_value(self, name):
+        pn = name.upper()
+        if pn in self.params:
+            (v,t,i) = self.params[pn]
+            self.params[pn] = (None, t, i)
 
     # Handle incoming PARAM_VALUE messages
     # NOTE: assuming that params[] keeps up to date with any
@@ -53,6 +66,10 @@ class mavbridge_param(object):
             self.params[name] = (msg.param_value, msg.param_type, msg.param_index)
             self.param_highest = max(self.param_highest, msg.param_index)
 
+        # If not relying on the cache, no need for a retry mechanism
+        if not self.use_cache:
+            return
+
         # NOTE: This retry mechanism is rather aggressive and may result in
         #  many redundant retries for a single param. If using this with
         #  a wireless link, consider adding a retry timeout.
@@ -71,9 +88,15 @@ class mavbridge_param(object):
             rospy.loginfo("Finished fetching all params")
 
     # Handle incoming ROS service requests to get param values
+    # NOTE: Uses Param.msg, but ignores incoming 'value' field
     def srv_param_get(self, req, bridge):
-        tries = 3
+        tries = 3  # TODO: Tune this value
         pn = req.name.upper()
+
+        # If not using cache, make sure param is re-fetched from AP
+        if not self.use_cache:
+            self._noneify_value(pn)
+
         while tries:
             if pn in self.params and self.params[pn][0] is not None:
                 # If we've already fetched this value
@@ -83,7 +106,7 @@ class mavbridge_param(object):
                 #  handle the response for us)
                 tries -= 1
                 self.master.param_fetch_one(pn)
-                time.sleep(0.5)  # TODO: this might be able to be shorter
+                time.sleep(0.2)  # TODO: Tune this value
         return { 'ok' : False, 'value' : float(0.0) }
 
     # Handle incoming ROS service requests to set param values
@@ -98,12 +121,11 @@ class mavbridge_param(object):
         # Try to set the new param value
         self.master.param_set_send(str(req.name), float(req.value))
 
-        # Invalidate the cached version so it has to be refetched
-        (v,t,i) = self.params[req.name.upper()]
-        self.params[req.name.upper()] = (None, t, i)
+        # We definitely want to re-fetch the param in this case
+        self._noneify_value(str(req.name))
 
         # Give the autopilot a moment
-        time.sleep(0.1)
+        time.sleep(0.2)  # TODO: Tune this value
 
         # If the newly-fetched parameter matches in value, we're good
         new = self.srv_param_get(req, bridge)
