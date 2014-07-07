@@ -17,6 +17,7 @@
 
 import rospy
 from pymavlink import mavutil
+import autopilot_bridge.msg as apmsg
 import autopilot_bridge.srv as apsrv
 import time
 import sys
@@ -47,9 +48,32 @@ class mavbridge_param(object):
             (v,t,i) = self.params[pn]
             self.params[pn] = (None, t, i)
 
+    # Get a value
+    def _get(self, name):
+        tries = 3  # TODO: Tune this value
+        pn = name.upper()
+
+        # If not using cache, make sure param is re-fetched from AP
+        if not self.use_cache:
+            self._noneify_value(pn)
+
+        while tries:
+            if pn in self.params and self.params[pn][0] is not None:
+                # If we've already fetched this value
+                return float(self.params[pn][0])
+            else:
+                # Otherwise try asking for it (and let mav_param_value()
+                #  handle the response for us)
+                tries -= 1
+                self.master.param_fetch_one(pn)
+                time.sleep(0.2)  # TODO: Tune this value
+        return None
+
+    ''' API '''
+
     # Handle incoming PARAM_VALUE messages
-    # NOTE: assuming that params[] keeps up to date with any
-    #  other changes because of this handler
+    # NOTE: If caching, then we assume that PARAM_VALUE messages are broadcast
+    #  and params[] is kept up to date by this handler
     def mav_param_value(self, msg_type, msg, bridge):
         # Parse the name first, in case something is awry
         try:
@@ -87,36 +111,36 @@ class mavbridge_param(object):
             self.initial_fetch_done = True
             rospy.loginfo("Finished fetching all params")
 
-    # Handle incoming ROS service requests to get param values
-    # NOTE: Uses Param.msg, but ignores incoming 'value' field
+    # Handle incoming ROS service requests to get a single param value
     def srv_param_get(self, req, bridge):
-        tries = 3  # TODO: Tune this value
-        pn = req.name.upper()
+        val = self._get(str(req.name))
+        if val is not None:
+            return { 'ok' : True, 'value' : val }
+        else:
+            return { 'ok' : False, 'value' : float(0.0) }
 
-        # If not using cache, make sure param is re-fetched from AP
-        if not self.use_cache:
-            self._noneify_value(pn)
+    # Handle incoming ROS service requests to get a list of param values
+    # NOTE: If a requested param cannot be fetched, it *won't* be included
+    #  in the response (we can send None over ROS). Hence, lack of a
+    #  param in the response is an implicit ok=False.
+    def srv_param_getlist(self, req, bridge):
+        params = []
 
-        while tries:
-            if pn in self.params and self.params[pn][0] is not None:
-                # If we've already fetched this value
-                return { 'ok' : True, 'value' : float(self.params[pn][0]) }
-            else:
-                # Otherwise try asking for it (and let mav_param_value()
-                #  handle the response for us)
-                tries -= 1
-                self.master.param_fetch_one(pn)
-                time.sleep(0.2)  # TODO: Tune this value
-        return { 'ok' : False, 'value' : float(0.0) }
+        for name in req.name:
+            val = self._get(str(name))
+            if val is not None:
+                pp = apmsg.ParamPair()
+                pp.name = str(name)
+                pp.value = float(val)
+                params.append(pp)
+        return { 'param' : params }
 
     # Handle incoming ROS service requests to set param values
-    # NOTE: Built on top of srv_param_get(); if you change that,
-    #  be sure to change this accordingly
     def srv_param_set(self, req, bridge):
         # Make sure the parameter exists first
-        old = self.srv_param_get(req, bridge)
-        if old and not old['ok']:
-            return { 'ok' : False, 'value' : float(0.0) }
+        old = self._get(str(req.name))
+        if old is None:
+            return { 'ok' : False }
 
         # Try to set the new param value
         self.master.param_set_send(str(req.name), float(req.value))
@@ -128,11 +152,8 @@ class mavbridge_param(object):
         time.sleep(0.2)  # TODO: Tune this value
 
         # If the newly-fetched parameter matches in value, we're good
-        new = self.srv_param_get(req, bridge)
-        if new and new['ok'] and new['value'] == req.value:
-            return new
-        else:
-            return { 'ok' : False, 'value' : float(0.0) }
+        new = self._get(str(req.name))
+        return new is not None and new == req.value
 
 
 #-----------------------------------------------------------------------
@@ -141,6 +162,8 @@ class mavbridge_param(object):
 def init(bridge):
     p_obj = mavbridge_param(bridge.master)
     bridge.add_mavlink_event("PARAM_VALUE", p_obj.mav_param_value)
-    bridge.add_ros_srv_event("param_get", apsrv.Param, p_obj.srv_param_get)
-    bridge.add_ros_srv_event("param_set", apsrv.Param, p_obj.srv_param_set)
+    bridge.add_ros_srv_event("param_get", apsrv.ParamGet, p_obj.srv_param_get)
+    bridge.add_ros_srv_event("param_getlist", apsrv.ParamGetList,
+                             p_obj.srv_param_getlist)
+    bridge.add_ros_srv_event("param_set", apsrv.ParamSet, p_obj.srv_param_set)
     return p_obj

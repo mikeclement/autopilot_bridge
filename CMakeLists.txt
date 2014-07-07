@@ -13,12 +13,15 @@ add_message_files(
   FILES
   Heartbeat.msg
   LLA.msg
+  ParamPair.msg
   Status.msg
 )
 
 add_service_files(
   FILES
-  Param.srv
+  ParamGet.srv
+  ParamGetList.srv
+  ParamSet.srv
 )
 
 generate_messages(
