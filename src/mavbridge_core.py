@@ -52,7 +52,8 @@ class MAVLinkBridge(object):
         self.mav_events = {}
         self.ros_sub_events = {}
         self.ros_srv_events = {}
-        self.registered_pubs = {}
+        self.ros_pubs = {}
+        self.timed_events = []
         self.ap_time_delta = rospy.Duration(0, 0)
 
         # Initialize ROS node
@@ -113,8 +114,8 @@ class MAVLinkBridge(object):
     # NOTE: Can pass optional args to rospy.Publisher() in *pub_args;
     #  of course, all users of the publisher will be subject to same options
     def get_ros_pub(self, topic, topic_type, *pub_args):
-        if topic in self.registered_pubs:
-            (t_type, t_pub) = self.registered_pubs[topic]
+        if topic in self.ros_pubs:
+            (t_type, t_pub) = self.ros_pubs[topic]
             if t_type == topic_type:
                 return t_pub
             else:
@@ -122,7 +123,7 @@ class MAVLinkBridge(object):
         else:
             try:
                 pub = rospy.Publisher("%s/%s"%(self.basename, topic), topic_type, *pub_args)
-                self.registered_pubs[topic] = (topic_type, pub)
+                self.ros_pubs[topic] = (topic_type, pub)
                 return pub
             except Exception as ex:
                 raise Exception("failed to create topic %s: %s" % (topic, ex.args[0]))
@@ -186,11 +187,18 @@ class MAVLinkBridge(object):
                               *srv_args)
 
     # Add a callback that triggers periodically
+    # NOTE: Cannot currently run a task faster than self.loop_rate Hz,
+    #  and as implemented may run a bit slower (depends on _mainloop())
     # Callback should be of the form:
     #   TODO
-    def add_timed_event(self, callback):
-        # TODO consider wrapping callback with some error handling
-        True
+    def add_timed_event(self, hz, callback):
+        period = int(self.loop_rate / hz)
+        if period <= 0:
+            raise Exception("Timed event at %d Hz exceeds maximum of %d Hz" % \
+                            (hz, self.loop_rate))
+        self.timed_events.append({ 'period' : period,
+                                   'next_in' : period,
+                                   'cb' : callback } )
 
     ### Main loop ###
 
@@ -270,6 +278,20 @@ class MAVLinkBridge(object):
                         + "\n  ".join("%s: %s" % (k, v) for (k, v) \
                                       in sorted(vars(msg).items()) \
                                       if not k.startswith('_'))
+
+            # Run any time-based events that are due
+            for ev in self.timed_events:
+                ev['next_in'] -= 1
+
+                if ev['next_in'] <= 0:
+                    try:
+                        cb = ev['cb']
+                        cb(self)
+                    except Exception as ex:
+                        rospy.logwarn("Timed event error: %s" % ex.args[0])
+                    finally:
+                        ev['next_in'] = ev['period']
+            
 
             # Sleep so ROS subscribers (and services) can run
             r.sleep()
