@@ -28,9 +28,11 @@ import std_msgs.msg as stdmsg
 import autopilot_bridge.msg as apmsg
 
 # Other needed ROS imports
+import rospy
 from tf.transformations import quaternion_from_euler
 
 # Import the bridge
+from pymavlink import mavutil
 from mavbridge_core import MAVLinkBridge
 
 #-----------------------------------------------------------------------
@@ -149,7 +151,7 @@ if __name__ == '__main__':
     parser.add_argument("--spam-mavlink", dest="spam_mavlink", 
                         action="store_true", default=False,
                         help="print every received mavlink message")
-    args = parser.parse_args()
+    args = parser.parse_args(args=rospy.myargv(argv=sys.argv)[1:])
     
     # If device isn't explicitly specified, try to detect it
     # TODO: Might make better use of /dev/serial/by-id/*
