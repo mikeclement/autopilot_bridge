@@ -15,6 +15,7 @@ add_message_files(
   LLA.msg
   ParamPair.msg
   Status.msg
+  Waypoint.msg
 )
 
 add_service_files(
@@ -22,6 +23,8 @@ add_service_files(
   ParamGet.srv
   ParamGetList.srv
   ParamSet.srv
+  WPGetAll.srv
+  WPSetAll.srv
 )
 
 generate_messages(

@@ -1,0 +1,12 @@
+uint16 seq
+uint8 frame
+uint16 command
+bool current
+bool autocontinue
+float64 param1
+float64 param2
+float64 param3
+float64 param4
+float64 x
+float64 y
+float64 z
