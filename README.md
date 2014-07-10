@@ -20,8 +20,10 @@ https://github.com/mavlink/mavlink
 
 For a user-specific install, run these commands on a clone:
 
-	cd mavlink/pymavlink
-	python setup.py build install --user
+```bash
+cd mavlink/pymavlink
+python setup.py build install --user
+```
 
 Note that features in some modules (e.g. acs) rely on customized branches
 of MAVLink. However, the base code should always run with the master branch.
@@ -29,87 +31,101 @@ of MAVLink. However, the base code should always run with the master branch.
 ## Installation
 
 You will want to follow the typical steps for creating a ROS workspace
-(see http://wiki.ros.org/catkin/Tutorials/create\_a\_workspace for details).
+(see http://wiki.ros.org/catkin/Tutorials/create_a_workspace for details).
 
 In summary:
 
-	mkdir -p ~/my_workspace/src
-        cd ~/my_workspace/src
-        catkin_init_workspace
-	cd ..
-	catkin_make
-	source devel/setup.bash  # You may wish to add this to ~/.bashrc
+```bash
+mkdir -p ~/my_workspace/src
+cd ~/my_workspace/src
+catkin_init_workspace
+cd ..
+catkin_make
+source devel/setup.bash  # You may wish to add this to ~/.bashrc
+```
         
 Then, clone this software into the workspace:
 
-	cd my_workspace/src
-	git clone url_to_autopilot_bridge
+```bash
+cd my_workspace/src
+git clone url_to_autopilot_bridge
+```
 
 Finally:
 
-	cd ~/my_workspace
-	catkin_make
+```bash
+cd ~/my_workspace
+catkin_make
+```
 
 ## Usage
 
 To run the MAVLink bridge (mavbridge.py), first start roscore in a separate terminal, then run:
 
-	rosrun autopilot_bridge mavbridge.py [options ...]
+```bash
+rosrun autopilot_bridge mavbridge.py [options ...]
+```
 
 You can specify --help at the end of the command to see all options.
 At a minimum, the -d or --device option is required.
 
 To run over serial device /dev/ttyS3 at 57600 baud:
 
-	rosrun autopilot_bridge mavbridge.py --device /dev/ttyS3 --baudrate 57600
+```bash
+rosrun autopilot_bridge mavbridge.py --device /dev/ttyS3 --baudrate 57600
+```
 
 To run over a TCP connection to a Simulation-In-The-Loop (SITL) instance running
 locally on port 5762:
 
-	rosrun autopilot_bridge mavbridge.py --device tcp:127.0.0.1:5762
+```bash
+rosrun autopilot_bridge mavbridge.py --device tcp:127.0.0.1:5762
+```
 
 Some additional options:
 
-* --ros-basename BASENAME - Use a basename other than "autopilot"
-* --gps-time-hack - After the bridge first connects, attempt to set the system clock from the autopilot. Requires root privileges.
-* --track-time-delta - Use autopilot time messages to maintain a "delta" between the local and autopilot clocks; use this when publishing ROS messages (see mavlink\_core.py:project\_ap\_time()).
-* --spam-mavlink - Print every _received_ MAVLink message in semi-friendly form to stdout.
+* `--ros-basename BASENAME` - Use a ROS basename other than "autopilot"
+* `--gps-time-hack` - After the bridge first connects, attempt to set the system clock from the autopilot. Requires root privileges.
+* `--track-time-delta` - Use autopilot time messages to maintain a "delta" between the local and autopilot clocks; use this when publishing ROS messages (see mavlink\_core.py:project\_ap\_time()).
+* `--spam-mavlink` - Print every _received_ MAVLink message in semi-friendly form to stdout.
 
 ## ROS Elements in mavbridge.py
 
 When run as described above, mavbridge.py provides the following ROS elements:
 
 * Publishers
-  * /autopilot/gps - GPS as a sensor\_msgs/NavSatFix message
-  * /autopilot/gps\_odom - GPS as a nav\_msgs/Odometry message
-  * /autopilot/imu - IMU / INS as sensor\_msgs/Imu message
+  * `/autopilot/gps` - GPS as a sensor\_msgs/NavSatFix message
+  * `/autopilot/gps_odom` - GPS as a nav\_msgs/Odometry message
+  * `/autopilot/imu` - IMU / INS as sensor\_msgs/Imu message
 * Subscribers
-  * /autopilot/arm - Arm or disarm the throttle (boolean)
-  * /autopilot/guided\_goto - Go to a lat/lon/alt in GUIDED mode (all floats)
-  * /autopilot/mode - Change mode (string)
-  * /autopilot/waypoint\_goto - Go to a programmed waypoint number (integer)
+  * `/autopilot/arm` - Arm or disarm the throttle (boolean)
+  * `/autopilot/guided_goto` - Go to a lat/lon/alt in GUIDED mode (all floats)
+  * `/autopilot/mode` - Change mode (string)
+  * `/autopilot/waypoint_goto` - Go to a programmed waypoint number (integer)
 
 There are additional modules that provide extra functionality (see below for more details).
 Two of interest are the 'param' (Parameter) and 'wp' (Waypoint) modules.
 Modules can be loaded with the -m or --module option. For instance, to run mavbridge.py
 with the 'param' module:
 
-	rosrun autopilot_bridge mavbridge.py --device /dev/ttyS3 --baudrate 57600 --module param
+```bash
+rosrun autopilot_bridge mavbridge.py --device /dev/ttyS3 --baudrate 57600 --module param
+```
 
 mavbridge.py will report which modules are loaded successfully (or not).
 
 The 'param' module provides the following additional ROS elements:
 
 * Services
-  * /autopilot/param\_get - Get a specific parameter by name
-  * /autopilot/param\_getlist - Get a set of parameters by name (array)
-  * /autopilot/param\_set - Set a parameter by name and value (string, float)
+  * `/autopilot/param_get` - Get a specific parameter by name
+  * `/autopilot/param_getlist` - Get a set of parameters by name (array)
+  * `/autopilot/param_set` - Set a parameter by name and value (string, float)
 
 The 'wp' module provides the following additional ROS elements:
 
 * Services
-  * /autopilot/wp\_getall - Get all waypoints in the autopilot
-  * /autopilot/wp\_setall - Clear and set all waypoints in the autopilot
+  * `/autopilot/wp_getall` - Get all waypoints in the autopilot
+  * `/autopilot/wp_setall` - Clear and set all waypoints in the autopilot
 
 See the service and message definitions in autopilot\_bridge for details
 on specifying service requests and using responses.
@@ -123,8 +139,10 @@ to choose either a procedural or an object-oriented style for each module.
 Each module must reside in its own file, such that module 'foo' is in mavbridge\_foo.py.
 Inside the module, there must exist the following function:
 
-	def init(bridge):
-	    ...
+```python
+def init(bridge):
+    ...
+```
 
 where 'bridge' is an instance of the MAVLinkBridge class in mavbridge\_core.py
 (itself not a module!).
