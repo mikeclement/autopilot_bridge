@@ -50,6 +50,7 @@ class MAVLinkBridge(object):
         # Internal variables
         self.master = None
         self.mav_events = {}
+        self.mav_events_all = []
         self.ros_sub_events = {}
         self.ros_srv_events = {}
         self.ros_pubs = {}
@@ -133,8 +134,11 @@ class MAVLinkBridge(object):
     # Add a callback that triggers on receipt of a MAVLink message type
     # callback must be of the form:
     #   foo(message_type, message, bridge_object)
+    # NOTE: if message_type == '*', will get called for ALL messages (almost)
     def add_mavlink_event(self, message_type, callback):
-        if message_type in self.mav_events:
+        if message_type == '*':
+            self.mav_events_all.append(callback)
+        elif message_type in self.mav_events:
             self.mav_events[message_type].append(callback)
         else:
             self.mav_events[message_type] = [callback]
@@ -190,9 +194,14 @@ class MAVLinkBridge(object):
     # NOTE: Cannot currently run a task faster than self.loop_rate Hz,
     #  and as implemented may run a bit slower (depends on _mainloop())
     # Callback should be of the form:
-    #   TODO
+    #   foo(bridge_object)
     def add_timed_event(self, hz, callback):
-        period = int(self.loop_rate / hz)
+        period = 0
+        if hz == 0:
+            # 0 Hz means run at loop_rate, intentionally
+            period = 1
+        else:
+            period = int(self.loop_rate / hz)
         if period <= 0:
             raise Exception("Timed event at %d Hz exceeds maximum of %d Hz" % \
                             (hz, self.loop_rate))
@@ -248,7 +257,9 @@ class MAVLinkBridge(object):
                 except:
                     # TODO might need to reconnect to autopilot
                     rospy.logwarn("MAV Recv error: " + ex.args[0])
+                    break  # NOTE: Unclear if this is the right behavior
                 if not msg:
+                    # No messages right now, do rest of outer loop
                     break
 
                 msg_type = msg.get_type()
@@ -263,7 +274,15 @@ class MAVLinkBridge(object):
                     if self.track_time_delta:
                         self._update_ap_time(msg.time_unix_usec)
 
-                # If message type has registered events, run them
+                # Run any all-types events
+                for ev in self.mav_events_all:
+                    try:
+                        ev(msg_type, msg, self)
+                    except Exception as ex:
+                        rospy.logwarn("MAVLink wildcard event error (%s): %s" % \
+                                      (msg_type, ex.args[0]))
+
+                # Run any type-specific events
                 if msg_type in self.mav_events:
                     for ev in self.mav_events[msg_type]:
                         try:
