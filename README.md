@@ -67,7 +67,8 @@ rosrun autopilot_bridge mavbridge.py [options ...]
 ```
 
 You can specify --help at the end of the command to see all options.
-At a minimum, the -d or --device option is required.
+Generally, you will want to specify the device or network connection using -d or --device.
+If omitted, mavbridge will attempt to autodetect a serial device.
 
 To run over serial device /dev/ttyS3 at 57600 baud:
 

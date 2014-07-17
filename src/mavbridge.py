@@ -8,9 +8,6 @@
 #
 # This software may be freely used, modified, and distributed.
 # This software comes with no warranty.
-#
-# Credit: This software is inspired by the following:
-#   https://github.com/cberzan/roscopter
 
 #-----------------------------------------------------------------------
 # Import a bunch of libraries
