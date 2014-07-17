@@ -23,6 +23,7 @@ add_service_files(
   ParamGet.srv
   ParamGetList.srv
   ParamSet.srv
+  SlaveSetup.srv
   WPGetAll.srv
   WPSetAll.srv
 )

@@ -105,7 +105,7 @@ When run as described above, mavbridge.py provides the following ROS elements:
   * `/autopilot/waypoint_goto` - Go to a programmed waypoint number (integer)
 
 There are additional modules that provide extra functionality (see below for more details).
-Two of interest are the 'param' (Parameter) and 'wp' (Waypoint) modules.
+Of interest are the 'param' (Parameter), 'wp' (Waypoint), and 'slave' modules.
 Modules can be loaded with the -m or --module option. For instance, to run mavbridge.py
 with the 'param' module:
 
@@ -127,6 +127,12 @@ The 'wp' module provides the following additional ROS elements:
 * Services
   * `/autopilot/wp_getall` - Get all waypoints in the autopilot
   * `/autopilot/wp_setall` - Clear and set all waypoints in the autopilot
+
+The 'slave' module allows connecting slave MAVLink applications (e.g., MAVProxy)
+to mavbridge. Slave channels are configurable at runtime using the
+`/autopilot/slave_setup` service, which takes a boolean value ('enable')
+and a string describing the channel (e.g., "/dev/ttyUSB0,57600" or
+"udp:127.0.0.1:1234").
 
 See the service and message definitions in autopilot\_bridge for details
 on specifying service requests and using responses.
