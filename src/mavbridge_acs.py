@@ -62,16 +62,23 @@ def pub_status(msg_type, msg, bridge):
 #-----------------------------------------------------------------------
 # ROS subscriber handlers
 
-# Purpose: Send heartbeat to AP when heartbeat arrives
+# Purpose: Payload-to-autopilot heartbeast, indicates payload is healthy
 # NOTE: Not yet supported in MAVLink master branch
 # Fields: None
-def sub_heartbeat(message, bridge):
+def sub_heartbeat_onboard(message, bridge):
     bridge.master.mav.heartbeat_send(
         mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
         mavutil.mavlink.MAV_TYPE_GENERIC,
-        0,
-        0, # TODO make sure it doesn't need to be: ap_last_custom_mode,
+        0, 0,
         mavutil.mavlink.MAV_STATE_ACTIVE)
+
+# Purpose: Ground-to-air heartbeat, indicates link from GCS
+def sub_heartbeat_ground(message, bridge):
+    # TODO check for timeliness
+    bridge.master.mav.heartbeat_send(
+        mavutil.mavlink.MAV_TYPE_GCS,
+        mavutil.mavlink.MAV_TYPE_GENERIC,
+        0, 0, 0)
 
 # Purpose: Initiate barometer calibration
 # Fields: None
@@ -119,7 +126,8 @@ def sub_landing_abort(message, bridge):
 
 def init(bridge):
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
-    bridge.add_ros_sub_event("heartbeat", apmsg.Heartbeat, sub_heartbeat)
+    bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard)
+    bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground)
     bridge.add_ros_sub_event("calpress", stdmsg.Empty, sub_calpress)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
     bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)

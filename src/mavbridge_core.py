@@ -152,7 +152,8 @@ class MAVLinkBridge(object):
             def callback_wrapper(msg):
                 try:
                     callback(msg, self)
-                    rospy.loginfo("ROS sub recvd: %s" % topic)
+                    if 'heartbeat' not in topic:
+                        rospy.loginfo("ROS sub recvd: %s" % topic)
                 except Exception as ex:
                     rospy.logwarn("ROS sub error (%s): %s" % (topic, ex.args[0]))
                 return True
