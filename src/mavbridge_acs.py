@@ -121,6 +121,19 @@ def sub_landing_abort(message, bridge):
         message.data, # TODO better to use parameter
         0, 0, 0, 0, 0, 0)
 
+# Purpose: Go to a lat/lon/alt in AUTO mode ordered by payload
+# Fields:
+# .lat - Decimal degrees
+# .lon - Decimal degrees
+# .alt - Decimal meters **AGL wrt home**
+def sub_payload_waypoint(message, bridge):
+    bridge.master.mav.command_long_send(
+        bridge.master.target_system,
+        bridge.master.target_component,
+        mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
+        0, 0, 0, 0, 0,
+        message.lat, message.lon, message.alt)
+
 #-----------------------------------------------------------------------
 # init()
 
@@ -132,4 +145,5 @@ def init(bridge):
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
     bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)
     bridge.add_ros_sub_event("land_abort", stdmsg.UInt16, sub_landing_abort)
+    bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA, sub_payload_waypoint) 
     return True
