@@ -83,7 +83,7 @@ class MAVLinkBridge(object):
 
         # If requested, attempt to sync local clock to autopilot
         if (sync_local_clock):
-            rospy.log_info("Waiting for nonzero SYSTEM_TIME message to sync local clock...")
+            rospy.loginfo("Waiting for nonzero SYSTEM_TIME message to sync local clock...")
             if self._sync_local_clock():
                 rospy.loginfo("Successfully synced local clock.")
             else:
