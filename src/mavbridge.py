@@ -111,7 +111,7 @@ def pub_gps_odom(msg_type, msg, bridge):
     odom.header.frame_id = 'base_footprint'
     odom.pose.pose.position.x = msg.lat/1e07
     odom.pose.pose.position.y = msg.lon/1e07
-    odom.pose.pose.position.z = msg.alt/1e03
+    odom.pose.pose.position.z = msg.relative_alt/1e03
     odom.pose.pose.orientation.x = 1
     odom.pose.pose.orientation.y = 0
     odom.pose.pose.orientation.z = 0
