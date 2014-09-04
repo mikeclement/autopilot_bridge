@@ -137,6 +137,8 @@ if __name__ == '__main__':
                         help="serial baud rate", default=57600)
     parser.add_argument('-m', "--module", dest="module", action='append', 
                         help="load module mavbridge_MODULE.pyc")
+    parser.add_argument("--looprate", dest="looprate",
+                        help="Rate at which internal loop runs", default=50)
     parser.add_argument("--ros-basename", dest="basename", 
                         help="ROS namespace basename", default="autopilot")
     parser.add_argument("--gps-time-hack", dest="gps_time_hack", 
@@ -179,6 +181,7 @@ if __name__ == '__main__':
         bridge = MAVLinkBridge(device=args.device,
                                baudrate=args.baudrate,
                                basename=args.basename,
+                               loop_rate=args.looprate,
                                sync_local_clock=args.gps_time_hack,
                                track_time_delta=args.track_time_delta,
                                spam_mavlink=args.spam_mavlink)

@@ -33,7 +33,7 @@ class MAVLinkBridge(object):
     def __init__(self, device, baudrate,
                  basename='autopilot',
                  mavlink_rate=10.0,
-                 loop_rate=10.0,
+                 loop_rate=50.0,
                  sync_local_clock=False,
                  track_time_delta=False,
                  spam_mavlink=False):
