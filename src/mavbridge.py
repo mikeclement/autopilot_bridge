@@ -83,20 +83,30 @@ def sub_waypoint_goto(message, bridge):
 def pub_imu(msg_type, msg, bridge):
     pub = bridge.get_ros_pub("imu", Imu)
     imu = Imu()
-    imu.header.stamp = bridge.project_ap_time()
+    imu.header.stamp = bridge.project_ap_time(msg)
     imu.header.frame_id = 'base_footprint'
+    # Orientation as a Quaternion, with unknown covariance
     quat = quaternion_from_euler(msg.roll, msg.pitch, msg.yaw, 'sxyz')
     imu.orientation = Quaternion(quat[0], quat[1], quat[2], quat[3])
+    imu.orientation_covariance = (0, 0, 0, 0, 0, 0, 0, 0, 0)
+    # Angular velocities, with unknown covariance
+    imu.angular_velocity.x = msg.rollspeed
+    imu.angular_velocity.y = msg.pitchspeed
+    imu.angular_velocity.z = msg.yawspeed
+    imu.angular_velocity_covariance = (0, 0, 0, 0, 0, 0, 0, 0, 0)
+    # Not supplied with linear accelerations
+    imu.linear_acceleration_covariance[0] = -1
     pub.publish(imu)
 
 # Publish GPS data in NavSatFix form
 def pub_gps(msg_type, msg, bridge):
     pub = bridge.get_ros_pub("gps", NavSatFix)
     fix = NavSatFix()
-    fix.header.stamp = bridge.project_ap_time()
+    fix.header.stamp = bridge.project_ap_time(msg)
     fix.header.frame_id = 'base_footprint'
     fix.latitude = msg.lat/1e07
     fix.longitude = msg.lon/1e07
+    # NOTE: absolute (MSL) altitude
     fix.altitude = msg.alt/1e03
     fix.status.status = NavSatStatus.STATUS_FIX
     fix.status.service = NavSatStatus.SERVICE_GPS
@@ -107,21 +117,29 @@ def pub_gps(msg_type, msg, bridge):
 def pub_gps_odom(msg_type, msg, bridge):
     pub = bridge.get_ros_pub("gps_odom", Odometry)
     odom = Odometry()
-    odom.header.stamp = bridge.project_ap_time()
+    odom.header.stamp = bridge.project_ap_time(msg)
     odom.header.frame_id = 'base_footprint'
     odom.pose.pose.position.x = msg.lat/1e07
     odom.pose.pose.position.y = msg.lon/1e07
+    # NOTE: relative (AGL wrt takeoff point) altitude
     odom.pose.pose.position.z = msg.relative_alt/1e03
+    # An identity orientation since GPS doesn't provide us with one
     odom.pose.pose.orientation.x = 1
     odom.pose.pose.orientation.y = 0
     odom.pose.pose.orientation.z = 0
     odom.pose.pose.orientation.w = 0
+    # robot_pose_ekf docs suggested using this for covariance
     odom.pose.covariance = ( 0.1, 0, 0, 0, 0, 0,
                              0, 0.1, 0, 0, 0, 0,
                              0, 0, 0.1, 0, 0, 0,
                              0, 0, 0, 99999, 0, 0,
                              0, 0, 0, 0, 99999, 0,
                              0, 0, 0, 0, 0, 99999 )
+    # Linear velocities, with unknown covariance
+    odom.twist.twist.linear.x = msg.vx / 1e02
+    odom.twist.twist.linear.y = msg.vy / 1e02
+    odom.twist.twist.linear.z = msg.vz / 1e02
+    odom.twist.covariance = odom.pose.covariance
     pub.publish(odom)
 
 #-----------------------------------------------------------------------
