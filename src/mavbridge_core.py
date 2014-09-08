@@ -15,6 +15,7 @@
 # Python imports
 from optparse import OptionParser
 import os
+import time
 
 # ROS imports
 import rospy
@@ -53,6 +54,7 @@ class MAVLinkBridge(object):
         self.ros_pubs = {}
         self.timed_events = []
         self.ap_time_delta = rospy.Duration(0, 0)
+        self.ap_boot_time = None
 
         # Initialize ROS node
         try:
@@ -94,9 +96,16 @@ class MAVLinkBridge(object):
     ### Useful functions for modular handlers ###
 
     # Return projected current time of AP (UTC) as rospy.Time object
-    # If track_time_delta is False, this should always return rospy.Time.now()
-    def project_ap_time(self):
-        return rospy.Time.now() - self.ap_time_delta
+    # If a MAVLink message object with the 'time_boot_ms' attribute is given,
+    #   project the actual AP time using the boot-time offset.
+    # Otherwise, use current system time as the basis.
+    # If track_time_delta is True, make adjustment based on timing observations
+    def project_ap_time(self, msg=None):
+        if msg is not None and self.ap_boot_time is not None and hasattr(msg, 'time_boot_ms'):
+            t = self.ap_boot_time + rospy.Duration.from_sec(float(msg.time_boot_ms) / 1e03)
+        else:
+            t = rospy.Time.now()
+        return t - self.ap_time_delta
 
     # Check whether sensor is present and healthy, based on last SYS_STATUS message
     def check_sensor_health(self, sensor_bits):
@@ -217,6 +226,28 @@ class MAVLinkBridge(object):
     #----------------------------------------------------------------------#
     ### Internals ###
 
+    # Process a SYSTEM_TIME message and return componentized seconds
+    def _process_system_time(self, msg):
+        local_time = time.time()
+
+        # Calculate adjusted autopilot time, accounting for processing latencies
+        # NOTE: would like to determine transmission latency, but lack info
+        snd_rcv_time = float(msg.time_unix_usec) / 1e06 - msg._timestamp
+        adjusted_time = local_time + snd_rcv_time
+
+        # If tracking time delta, update the delta
+        # Using simplified numerical solution, but really local_time - adjusted_time
+        if self.track_time_delta and msg.time_unix_usec > 0:
+            self.ap_time_delta = rospy.Time.from_sec(0.0 - snd_rcv_time)
+
+        # Record the time at which the autopilot booted (when time_boot_ms == 0)
+        if self.ap_boot_time is None:
+            self.ap_boot_time = rospy.Time.from_sec(
+                                    float(msg.time_unix_usec) / 1e06 - \
+                                    float(msg.time_boot_ms) / 1e03)
+
+        return adjusted_time
+
     # Set system clock based on SYSTEM_TIME message
     # NOTE: May not return if usable SYSTEM_TIME message not seen
     # NOTE: Requires ability to set date using 'date' command
@@ -226,18 +257,8 @@ class MAVLinkBridge(object):
             msg = self.master.recv_match(type='SYSTEM_TIME', blocking=True)
             if msg.time_unix_usec:
                 break
-        secs = int(msg.time_unix_usec / 1e06)
-        nsecs = (msg.time_unix_usec % 1e06) * 1e03
-        return not bool(os.system("sudo date -s '@%u.%u'" % (secs, nsecs)))
-
-    # Update delta between local and AP time (provided in usec)
-    def _update_ap_time(self, ap_epoch_usec):
-        if ap_epoch_usec == 0:  # If no AP time, ignore
-            return
-        ap_epoch_sec = int(ap_epoch_usec / 1e06)
-        ap_nsec = (ap_epoch_usec % 1e06) * 1e03
-        ap_time = rospy.Time(ap_epoch_sec, ap_nsec)
-        self.ap_time_delta = rospy.Time.now() - ap_time
+        t = self._process_system_time(msg)
+        return not bool(os.system("sudo date -s '@%f'" % t))
 
     # Main loop that receives and handles mavlink messages
     def _mainloop(self):
@@ -267,10 +288,7 @@ class MAVLinkBridge(object):
                     # Ignore "bad data"
                     continue
                 elif msg_type == "SYSTEM_TIME":
-                    # Adjust known time offset from autopilot's
-                    # NOTE: This method doesn't account for mavlink latency
-                    if self.track_time_delta:
-                        self._update_ap_time(msg.time_unix_usec)
+                    self._process_system_time(msg)
 
                 # Run any all-types events
                 for ev in self.mav_events_all:
