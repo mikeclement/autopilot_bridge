@@ -81,7 +81,7 @@ class MAVLinkBridge(object):
                 mavlink_rate,
                 1)
         except Exception as ex:
-            raise Exception("MAVLink init error: " + ex.args[0])
+            raise Exception("MAVLink init error: " + str(ex.args[0]))
 
         # If requested, attempt to sync local clock to autopilot
         if (sync_local_clock):
