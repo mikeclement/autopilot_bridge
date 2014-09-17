@@ -30,7 +30,7 @@ from tf.transformations import quaternion_from_euler
 
 # Import the bridge
 from pymavlink import mavutil
-from mavbridge_core import MAVLinkBridge
+from MAVLinkBridge import MAVLinkBridge
 
 #-----------------------------------------------------------------------
 # Standard ROS subscribers

@@ -87,7 +87,7 @@ Some additional options:
 
 * `--ros-basename BASENAME` - Use a ROS basename other than "autopilot"
 * `--gps-time-hack` - After the bridge first connects, attempt to set the system clock from the autopilot. Requires root privileges.
-* `--track-time-delta` - Use autopilot time messages to maintain a "delta" between the local and autopilot clocks; use this when publishing ROS messages (see mavlink\_core.py:project\_ap\_time()).
+* `--track-time-delta` - Use autopilot time messages to maintain a "delta" between the local and autopilot clocks; use this when publishing ROS messages (see MAVLinkBridge.py:project\_ap\_time()).
 * `--spam-mavlink` - Print every _received_ MAVLink message in semi-friendly form to stdout.
 
 ## ROS Elements in mavbridge.py
@@ -151,10 +151,9 @@ def init(bridge):
     ...
 ```
 
-where 'bridge' is an instance of the MAVLinkBridge class in mavbridge\_core.py
-(itself not a module!).
+where 'bridge' is an instance of the MAVLinkBridge class in MAVLinkBridge.py.
 init() can use this instance to register ROS subscriber and service handlers,
-MAVLink message handlers, and timed event handlers. See mavbridge\_core.py for
+MAVLink message handlers, and timed event handlers. See MAVLinkBridge.py for
 details, and the included modules for examples.
 Note that (by convention only) publishers, subscribers, and services ought
 to be prefixed with the module name; hence module 'foo' publisher 'bar'
