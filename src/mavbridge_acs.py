@@ -14,6 +14,7 @@
 
 from pymavlink import mavutil
 import std_msgs.msg as stdmsg
+import nav_msgs.msg as navmsg
 import autopilot_bridge.msg as apmsg
 
 #-----------------------------------------------------------------------
@@ -30,6 +31,42 @@ mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
 
 #-----------------------------------------------------------------------
 # MAVLink message handlers
+
+def pub_pose_att_vel(msg_type, msg, bridge):
+    pub = bridge.get_ros_pub("acs_pose", navmsg.Odometry)
+    odom = navmsg.Odometry()
+    odom.header.stamp = bridge.project_ap_time(msg)
+    odom.header.frame_id = 'base_footprint'
+    odom.pose.pose.position.x = msg.lat/1e07
+    odom.pose.pose.position.y = msg.lon/1e07
+    # NOTE: relative (AGL wrt takeoff point) altitude
+    odom.pose.pose.position.z = msg.relative_alt/1e03
+    odom.pose.pose.orientation.x = msg.quat[0]
+    odom.pose.pose.orientation.y = msg.quat[1]
+    odom.pose.pose.orientation.z = msg.quat[2]
+    odom.pose.pose.orientation.w = msg.quat[3]
+    # The covariance matrix is not yet usable
+    odom.pose.covariance = ( 0.1, 0, 0, 0, 0, 0,
+                             0, 0.1, 0, 0, 0, 0,
+                             0, 0, 0.1, 0, 0, 0,
+                             0, 0, 0, 99999, 0, 0,
+                             0, 0, 0, 0, 99999, 0,
+                             0, 0, 0, 0, 0, 99999 )
+    # Linear and angular velocities, with unknown covariance
+    odom.twist.twist.linear.x = msg.vx / 1e02
+    odom.twist.twist.linear.y = msg.vy / 1e02
+    odom.twist.twist.linear.z = msg.vz / 1e02
+    odom.twist.twist.angular.x = msg.rollspeed
+    odom.twist.twist.angular.y = msg.pitchspeed
+    odom.twist.twist.angular.z = msg.yawspeed
+    # The covariance matrix is not yet usable
+    odom.twist.covariance = ( 0.1, 0, 0, 0, 0, 0,
+                             0, 0.1, 0, 0, 0, 0,
+                             0, 0, 0.1, 0, 0, 0,
+                             0, 0, 0, 99999, 0, 0,
+                             0, 0, 0, 0, 99999, 0,
+                             0, 0, 0, 0, 0, 99999 )
+    pub.publish(odom)
 
 # Publish a status message with many fields
 def pub_status(msg_type, msg, bridge):
@@ -139,6 +176,7 @@ def sub_payload_waypoint(message, bridge):
 
 def init(bridge):
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
+    bridge.add_mavlink_event("GLOBAL_POS_ATT_NED_COV", pub_pose_att_vel)
     bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard)
     bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground)
     bridge.add_ros_sub_event("calpress", stdmsg.Empty, sub_calpress)
