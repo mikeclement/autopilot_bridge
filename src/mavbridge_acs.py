@@ -42,7 +42,7 @@ def pub_pose_att_vel(msg_type, msg, bridge):
     odom.pose.pose.position.x = msg.lat/1e07
     odom.pose.pose.position.y = msg.lon/1e07
     # NOTE: relative (AGL wrt takeoff point) altitude
-    odom.pose.pose.position.z = msg.relative_alt/1e03
+    odom.pose.pose.position.z = msg.relative_alt/1e02
     # NOTE: msg.quat actually holds Euler angles for now, but this will change
     #odom.pose.pose.orientation.x = msg.quat[0]
     #odom.pose.pose.orientation.y = msg.quat[1]
@@ -57,10 +57,11 @@ def pub_pose_att_vel(msg_type, msg, bridge):
                              0, 0, 0, 99999, 0, 0,
                              0, 0, 0, 0, 99999, 0,
                              0, 0, 0, 0, 0, 99999 )
-    # Linear and angular velocities, with unknown covariance
-    odom.twist.twist.linear.x = msg.vx / 1e02
-    odom.twist.twist.linear.y = msg.vy / 1e02
-    odom.twist.twist.linear.z = msg.vz / 1e02
+    # Linear and angular velocities, with unknown covariance (in m/s)
+    odom.twist.twist.linear.x = msg.vx / 1e02  # north-positive
+    odom.twist.twist.linear.y = msg.vy / 1e02  # east-positive
+    odom.twist.twist.linear.z = msg.vz / 1e02  # down-positive
+    # Angular velocities in rad/s
     odom.twist.twist.angular.x = msg.rollspeed
     odom.twist.twist.angular.y = msg.pitchspeed
     odom.twist.twist.angular.z = msg.yawspeed
