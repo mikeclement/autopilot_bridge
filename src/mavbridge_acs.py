@@ -15,7 +15,9 @@
 from pymavlink import mavutil
 import std_msgs.msg as stdmsg
 import nav_msgs.msg as navmsg
+from geometry_msgs.msg import Quaternion
 import autopilot_bridge.msg as apmsg
+from tf.transformations import quaternion_from_euler
 
 #-----------------------------------------------------------------------
 # Ugly globals
@@ -41,10 +43,13 @@ def pub_pose_att_vel(msg_type, msg, bridge):
     odom.pose.pose.position.y = msg.lon/1e07
     # NOTE: relative (AGL wrt takeoff point) altitude
     odom.pose.pose.position.z = msg.relative_alt/1e03
-    odom.pose.pose.orientation.x = msg.quat[0]
-    odom.pose.pose.orientation.y = msg.quat[1]
-    odom.pose.pose.orientation.z = msg.quat[2]
-    odom.pose.pose.orientation.w = msg.quat[3]
+    # NOTE: msg.quat actually holds Euler angles for now, but this will change
+    #odom.pose.pose.orientation.x = msg.quat[0]
+    #odom.pose.pose.orientation.y = msg.quat[1]
+    #odom.pose.pose.orientation.z = msg.quat[2]
+    #odom.pose.pose.orientation.w = msg.quat[3]
+    quat = quaternion_from_euler(msg.quat[0], msg.quat[1], msg.quat[2], 'sxyz')
+    odom.pose.pose.orientation = Quaternion(quat[0], quat[1], quat[2], quat[3])
     # The covariance matrix is not yet usable
     odom.pose.covariance = ( 0.1, 0, 0, 0, 0, 0,
                              0, 0.1, 0, 0, 0, 0,
