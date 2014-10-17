@@ -1,8 +1,10 @@
 uint8 MODE_RALLY=0
 uint8 MODE_MANUAL=1
-uint8 MODE_FBW=2
+uint8 MODE_FBWA=2
 uint8 MODE_GUIDED=3
 uint8 MODE_AUTO=4
+uint8 MODE_FBWB=5
+uint8 MODE_CIRCLE=6
 uint8 MODE_UNKNOWN=15
 
 Header  header

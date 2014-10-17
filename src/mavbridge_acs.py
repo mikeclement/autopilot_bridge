@@ -26,7 +26,9 @@ from tf.transformations import quaternion_from_euler
 # TODO replace this
 mode_mav_to_enum = { 'RTL' : apmsg.Status.MODE_RALLY,
                      'MANUAL' : apmsg.Status.MODE_MANUAL,
-                     'FBWA' : apmsg.Status.MODE_FBW,
+                     'FBWA' : apmsg.Status.MODE_FBWA,
+                     'FBWB' : apmsg.Status.MODE_FBWB,
+                     'CIRCLE' : apmsg.Status.MODE_CIRCLE,
                      'GUIDED' : apmsg.Status.MODE_GUIDED,
                      'AUTO' : apmsg.Status.MODE_AUTO }
 mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
