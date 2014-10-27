@@ -14,10 +14,7 @@
 
 from pymavlink import mavutil
 import std_msgs.msg as stdmsg
-import nav_msgs.msg as navmsg
-from geometry_msgs.msg import Quaternion
 import autopilot_bridge.msg as apmsg
-from tf.transformations import quaternion_from_euler
 
 #-----------------------------------------------------------------------
 # Ugly globals
@@ -37,21 +34,22 @@ mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
 # MAVLink message handlers
 
 def pub_pose_att_vel(msg_type, msg, bridge):
-    pub = bridge.get_ros_pub("acs_pose", navmsg.Odometry)
-    odom = navmsg.Odometry()
+    pub = bridge.get_ros_pub("acs_pose", apmsg.Geodometry)
+    odom = apmsg.Geodometry()
     odom.header.stamp = bridge.project_ap_time(msg)
     odom.header.frame_id = 'base_footprint'
-    odom.pose.pose.position.x = msg.lat/1e07
-    odom.pose.pose.position.y = msg.lon/1e07
-    # NOTE: relative (AGL wrt takeoff point) altitude
-    odom.pose.pose.position.z = msg.relative_alt/1e02
-    # NOTE: msg.quat actually holds Euler angles for now, but this will change
-    #odom.pose.pose.orientation.x = msg.quat[0]
-    #odom.pose.pose.orientation.y = msg.quat[1]
-    #odom.pose.pose.orientation.z = msg.quat[2]
-    #odom.pose.pose.orientation.w = msg.quat[3]
-    quat = quaternion_from_euler(msg.quat[0], msg.quat[1], msg.quat[2], 'sxyz')
-    odom.pose.pose.orientation = Quaternion(quat[0], quat[1], quat[2], quat[3])
+    # Position (lat/lon/alt, with two alts)
+    odom.pose.pose.position.lat = msg.lat/1e07
+    odom.pose.pose.position.lon = msg.lon/1e07
+    odom.pose.pose.position.alt = msg.alt/1e02
+    odom.pose.pose.position.rel_alt = msg.relative_alt/1e02
+    odom.pose.pose.position.using_alt = True
+    odom.pose.pose.position.using_rel_alt = True
+    # Orientation (quaternion)
+    odom.pose.pose.orientation.x = msg.quat[0]
+    odom.pose.pose.orientation.y = msg.quat[1]
+    odom.pose.pose.orientation.z = msg.quat[2]
+    odom.pose.pose.orientation.w = msg.quat[3]
     # The covariance matrix is not yet usable
     odom.pose.covariance = ( 0.1, 0, 0, 0, 0, 0,
                              0, 0.1, 0, 0, 0, 0,
