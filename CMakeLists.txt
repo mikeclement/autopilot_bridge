@@ -11,6 +11,10 @@ find_package(catkin REQUIRED COMPONENTS
 
 add_message_files(
   FILES
+  GeoPoint.msg
+  GeoPose.msg
+  GeoPoseWithCovariance.msg
+  Geodometry.msg
   Heartbeat.msg
   LLA.msg
   ParamPair.msg
