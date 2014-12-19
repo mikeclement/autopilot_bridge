@@ -183,11 +183,11 @@ def sub_payload_waypoint(message, bridge):
 def init(bridge):
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
     bridge.add_mavlink_event("GLOBAL_POS_ATT_NED_COV", pub_pose_att_vel)
-    bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard)
-    bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground)
+    bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard, log=False)
+    bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground, log=False)
     bridge.add_ros_sub_event("calpress", stdmsg.Empty, sub_calpress)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
     bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)
     bridge.add_ros_sub_event("land_abort", stdmsg.UInt16, sub_landing_abort)
-    bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA, sub_payload_waypoint) 
+    bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA, sub_payload_waypoint, log=False) 
     return True

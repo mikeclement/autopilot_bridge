@@ -153,7 +153,7 @@ class MAVLinkBridge(object):
     # Callback should be of the form:
     #   foo(message, bridge_object)
     # NOTE: Can pass optional args to rospy.Subscriber() in *sub_args
-    def add_ros_sub_event(self, topic, topic_type, callback, *sub_args):
+    def add_ros_sub_event(self, topic, topic_type, callback, log=True, *sub_args):
         if topic in self.ros_sub_events:
             raise Exception("topic '%s' already has a subscriber" % topic)
         else:
@@ -161,7 +161,7 @@ class MAVLinkBridge(object):
             def callback_wrapper(msg):
                 try:
                     callback(msg, self)
-                    if 'heartbeat' not in topic:
+                    if log:
                         rospy.loginfo("ROS sub recvd: %s" % topic)
                 except Exception as ex:
                     rospy.logwarn("ROS sub error (%s): %s" % (topic, ex.args[0]))
@@ -176,7 +176,7 @@ class MAVLinkBridge(object):
     # Callback should be of the form:
     #   foo(request, bridge_object)
     # NOTE: Can pass optional args to rospy.Service() in *srv_args
-    def add_ros_srv_event(self, srv_name, srv_type, callback, *srv_args):
+    def add_ros_srv_event(self, srv_name, srv_type, callback, log=True, *srv_args):
         if srv_name in self.ros_srv_events:
             raise Exception("service '%s' is already defined" % srv_name)
         else:
@@ -185,7 +185,8 @@ class MAVLinkBridge(object):
                 try:
                     # TODO: Add queueing logic to prevent service calls
                     #  from stepping on each other
-                    rospy.loginfo("ROS srv recvd: %s" % srv_name)
+                    if log:
+                        rospy.loginfo("ROS srv recvd: %s" % srv_name)
                     return callback(req, self)
                 except Exception as ex:
                     rospy.logwarn("ROS srv error (%s): %s" % (srv_name, ex.args[0]))
