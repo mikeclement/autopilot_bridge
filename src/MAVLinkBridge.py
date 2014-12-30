@@ -25,6 +25,26 @@ from pymavlink import mavutil
 
 
 #-----------------------------------------------------------------------
+# Class to contain info about a timed event
+
+class MLBTimedEvent(object):
+    def __init__(self, interval, callback):
+        self._interval = interval
+        self._callback = callback
+        self._next_time = time.time() + self._interval
+
+    def due(self, t=None):
+        if not t:
+            t = time.time()
+        return bool(self._next_time <= t)
+
+    def run(self, bridge, t=None):
+        self._callback(bridge)
+        if not t:
+            t = time.time()
+        self._next_time = t + self._interval
+
+#-----------------------------------------------------------------------
 # Class that wraps mavlink connection object
 
 class MAVLinkBridge(object):
@@ -199,23 +219,16 @@ class MAVLinkBridge(object):
                               *srv_args)
 
     # Add a callback that triggers periodically
-    # NOTE: Cannot currently run a task faster than self.loop_rate Hz,
-    #  and as implemented may run a bit slower (depends on _mainloop())
     # Callback should be of the form:
     #   foo(bridge_object)
     def add_timed_event(self, hz, callback):
-        period = 0
+        interval = 0
         if hz == 0:
-            # 0 Hz means run at loop_rate, intentionally
-            period = 1
+            # 0 Hz means run as fast as possible (don't do this unless you mean it!)
+            interval = 0
         else:
-            period = int(self.loop_rate / hz)
-        if period <= 0:
-            raise Exception("Timed event at %d Hz exceeds maximum of %d Hz" % \
-                            (hz, self.loop_rate))
-        self.timed_events.append({ 'period' : period,
-                                   'next_in' : period,
-                                   'cb' : callback } )
+            interval = 1.0 / float(hz)
+        self.timed_events.append(MLBTimedEvent(interval, callback))
 
     ### Main loop ###
 
@@ -261,74 +274,70 @@ class MAVLinkBridge(object):
         t = self._process_system_time(msg)
         return not bool(os.system("sudo date -s '@%f'" % t))
 
+    # Handle a received MAVLink message
+    def _handle_msg(self, msg):
+        msg_type = msg.get_type()
+
+        # Handle special cases
+        if msg_type == "BAD_DATA":
+            return  # Ignore "bad data"
+        elif msg_type == "SYSTEM_TIME":
+            self._process_system_time(msg)
+
+        # Run any all-types events
+        for ev in self.mav_events_all:
+            try:
+                ev(msg_type, msg, self)
+            except Exception as ex:
+                rospy.logwarn("MAVLink wildcard event error (%s): %s" % \
+                              (msg_type, ex.args[0]))
+
+        # Run any type-specific events
+        if msg_type not in self.mav_events:
+            return
+        for ev in self.mav_events[msg_type]:
+            try:
+                ev(msg_type, msg, self)
+            except Exception as ex:
+                rospy.logwarn("MAVLink event error (%s): %s" % \
+                              (msg_type, ex.args[0]))
+
+        # If you *really* want to see what's coming out of mavlink
+        if self.spam_mavlink:
+            print msg_type + " @ " + str(msg._timestamp) + ":\n  " \
+                + "\n  ".join("%s: %s" % (k, v) for (k, v) \
+                              in sorted(vars(msg).items()) \
+                              if not k.startswith('_'))
+
+    # Handle timed events
+    def _handle_timed(self):
+        t = time.time()
+        for ev in [ev for ev in self.timed_events if ev.due(t)]:
+            # NOTE: technically, want to use the time when the event
+            # actually ran, but this is slightly more efficient.
+            ev.run(self, t)
+
     # Main loop that receives and handles mavlink messages
     def _mainloop(self):
-        # Try to run this loop at LOOP_RATE Hz
+        # Try to run this loop at >= LOOP_RATE Hz
         r = rospy.Rate(self.loop_rate)
         while not rospy.is_shutdown():
-            # Process all new messages from master
-            # NOTE: if too many messages come in, we'll never break
-            #  out of this loop and subscribers may not run.
-            while True:
-                # Check for messages, break loop if none available
-                msg = None
-                try:
-                    msg = self.master.recv_match(blocking=False)
-                except:
-                    # TODO might need to reconnect to autopilot
-                    rospy.logwarn("MAV Recv error: " + ex.args[0])
-                    break  # NOTE: Unclear if this is the right behavior
-                if not msg:
-                    # No messages right now, do rest of outer loop
-                    break
+            # Check for a MAVLink message
+            msg = None
+            try:
+                msg = self.master.recv_match(blocking=False)
+            except Exception as ex:
+                rospy.logwarn("MAV Recv error: " + ex.args[0])
 
-                msg_type = msg.get_type()
+            # Process the message
+            if msg:
+                self._handle_msg(msg)
 
-                # Handle any internal tasks and special cases
-                if msg_type == "BAD_DATA":
-                    # Ignore "bad data"
-                    continue
-                elif msg_type == "SYSTEM_TIME":
-                    self._process_system_time(msg)
+            # Handle any timed tasks
+            self._handle_timed()
 
-                # Run any all-types events
-                for ev in self.mav_events_all:
-                    try:
-                        ev(msg_type, msg, self)
-                    except Exception as ex:
-                        rospy.logwarn("MAVLink wildcard event error (%s): %s" % \
-                                      (msg_type, ex.args[0]))
-
-                # Run any type-specific events
-                if msg_type in self.mav_events:
-                    for ev in self.mav_events[msg_type]:
-                        try:
-                            ev(msg_type, msg, self)
-                        except Exception as ex:
-                            rospy.logwarn("MAVLink event error (%s): %s" % \
-                                          (msg_type, ex.args[0]))
-
-                # If you *really* want to see what's coming out of mavlink
-                if self.spam_mavlink:
-                    print msg_type + " @ " + str(msg._timestamp) + ":\n  " \
-                        + "\n  ".join("%s: %s" % (k, v) for (k, v) \
-                                      in sorted(vars(msg).items()) \
-                                      if not k.startswith('_'))
-
-            # Run any time-based events that are due
-            for ev in self.timed_events:
-                ev['next_in'] -= 1
-
-                if ev['next_in'] <= 0:
-                    try:
-                        cb = ev['cb']
-                        cb(self)
-                    except Exception as ex:
-                        rospy.logwarn("Timed event error: %s" % ex.args[0])
-                    finally:
-                        ev['next_in'] = ev['period']
-            
-
-            # Sleep so ROS subscribers (and services) can run
-            r.sleep()
+            # If there were no new messages, sleep for a bit
+            # NOTE: If messages are coming in fast enough, we won't sleep
+            if not msg:
+                r.sleep()
 
