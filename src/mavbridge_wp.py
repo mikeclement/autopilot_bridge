@@ -25,9 +25,10 @@ import sys
 class mavbridge_wp(object):
     def __init__(self):
         self.wp_list = []
-        self.wp_expected_count = 0
         self.fetch_in_progress = False
+        self.fetch_last_only = False
         self.fetch_current = -1
+        self.fetch_highest = -1
         self.push_in_progress = False
         self.push_current = -1
         self.timeout = -1
@@ -49,9 +50,9 @@ class mavbridge_wp(object):
     def _clr(self):
         self.wp_list = []
 
-    # Get count from array
+    # Get count of populated entries in array
     def _cnt(self):
-        return len(self.wp_list)
+        return len([wp for wp in self.wp_list if wp is not None])
 
     # Reset timeout time
     def _reset_to(self):
@@ -63,7 +64,7 @@ class mavbridge_wp(object):
 
     # Send up the "next" waypoint
     def _push(self, bridge, seq):
-        if seq < self._cnt():
+        if self._get(seq):
             (f, co, cu, a, p1, p2, p3, p4, x, y, z) = self._get(seq)
             wp = mavutil.mavlink.MAVLink_mission_item_message(
                      bridge.master.target_system,
@@ -80,28 +81,35 @@ class mavbridge_wp(object):
         if self.fetch_in_progress and self.fetch_current == -1:
             self._reset_to()
             self._clr()
-            self.wp_expected_count = msg.count
+            self.fetch_current = 0
+            self.fetch_highest = msg.count - 1
+
+            # No waypoints to fetch; we're done
             if msg.count == 0:
                 self.fetch_in_progress = False
-            else:
-                self.fetch_current = 0
-                bridge.master.waypoint_request_send(0)
+                return
+
+            # Make the first request
+            if self.fetch_last_only:
+                # Only want the last waypoint
+                self.fetch_current = msg.count - 1
+            bridge.master.waypoint_request_send(self.fetch_current)
 
     # Handle incoming MISSION_ITEM messages
     def mav_mission_item(self, msg_type, msg, bridge):
         # Ignore repeated and spurious messages
-        if self.fetch_in_progress and msg.seq == self._cnt():
+        if self.fetch_in_progress and msg.seq == self.fetch_current:
             self._reset_to()
             self._set(msg.seq, (msg.frame, msg.command,
                                 msg.current, msg.autocontinue,
                                 msg.param1, msg.param2, msg.param3, msg.param4,
                                 msg.x, msg.y, msg.z))
 
-            self.fetch_current = msg.seq + 1
-            if msg.seq + 1 == self.wp_expected_count:
+            if msg.seq == self.fetch_highest:
                 self.fetch_in_progress = False
             else:
-                bridge.master.waypoint_request_send(msg.seq + 1)
+                self.fetch_current = msg.seq + 1
+                bridge.master.waypoint_request_send(self.fetch_current)
 
     # Handle incoming MISSION_REQUEST messages
     def mav_mission_request(self, msg_type, msg, bridge):
@@ -119,14 +127,13 @@ class mavbridge_wp(object):
     # Every so often, check if we need to retry any operations
     def timed_wp_retry(self, bridge):
         # Retry cases for fetching
-        if self.fetch_in_progress and self._check_to() and \
-           self.fetch_current <= self.wp_expected_count:
+        if self.fetch_in_progress and self._check_to():
             if self.fetch_current == -1:
                 # Retry getting the count
                 bridge.master.waypoint_request_list_send()
             else:
-                # Assumes the range is 0..count-1, so _cnt() is the next wp
-                bridge.master.waypoint_request_send(self._cnt())
+                # Retry the current waypoint index
+                bridge.master.waypoint_request_send(self.fetch_current)
 
         # Retry cases for pushing
         if self.push_in_progress and self._check_to():
@@ -138,10 +145,7 @@ class mavbridge_wp(object):
                 self._push(bridge, self.push_current)
 
     # Handle incoming ROS service requests to get all waypoints
-    # NOTE: Currently there is little support for or protection against
-    #  concurrent service handling; multiple get's/set's are probably
-    #  ok, but a get DURING a set or vice versa might not be safe.
-    def srv_wp_getall(self, req, bridge):
+    def srv_wp_getall(self, req, bridge, last_only=False):
         # Make sure another service request isn't active
         if self.fetch_in_progress or self.push_in_progress:
             return { 'ok' : False, 'wp' : [] }
@@ -152,20 +156,25 @@ class mavbridge_wp(object):
         # Initialize the retry timeout, THEN change state, THEN request
         self._reset_to()
         self.fetch_current = -1
+        self.fetch_last_only = last_only
         self.fetch_in_progress = True
         bridge.master.waypoint_request_list_send()
 
         # Wait up to 5 seconds for transaction to complete
-        stop_time = time.time() + 5.0  # TODO: tune this
+        stop_time = time.time() + 10.0  # TODO: tune this
         while self.fetch_in_progress and time.time() < stop_time:
             time.sleep(0.1)  # TODO: tune this
 
-        if self._cnt() != self.wp_expected_count:
+        if self.fetch_in_progress:
+            self.fetch_in_progress = False
             return { 'ok' : False, 'wp' : [] }
         else:
             wplist = []
-            for i in range(self._cnt()):
-                (f, co, cu, a, p1, p2, p3, p4, x, y, z) = self._get(i)
+            for i in range(self.fetch_highest+1):
+                wp = self._get(i)
+                if not wp:
+                    continue
+                (f, co, cu, a, p1, p2, p3, p4, x, y, z) = wp
                 wp_msg = apmsg.Waypoint()
                 wp_msg.seq = i
                 wp_msg.frame = f
@@ -183,9 +192,6 @@ class mavbridge_wp(object):
             return { 'ok' : True, 'wp' : wplist }
 
     # Handle incoming ROS service requests to get all waypoints
-    # NOTE: Currently there is little support for or protection against
-    #  concurrent service handling; multiple get's/set's are probably
-    #  ok, but a get DURING a set or vice versa might not be safe.
     def srv_wp_setall(self, req, bridge):
         # Make sure another service request isn't active
         #  and that there's at least one waypoint to push
@@ -230,5 +236,7 @@ def init(bridge):
     bridge.add_mavlink_event("MISSION_ACK", w_obj.mav_mission_ack)
     bridge.add_timed_event(2, w_obj.timed_wp_retry)
     bridge.add_ros_srv_event("wp_getall", apsrv.WPGetAll, w_obj.srv_wp_getall)
+    bridge.add_ros_srv_event("wp_getlast", apsrv.WPGetAll,
+                             lambda r,b: w_obj.srv_wp_getall(r, b, True))
     bridge.add_ros_srv_event("wp_setall", apsrv.WPSetAll, w_obj.srv_wp_setall)
     return w_obj
