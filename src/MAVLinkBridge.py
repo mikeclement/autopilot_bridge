@@ -242,6 +242,11 @@ class MAVLinkBridge(object):
 
     # Process a SYSTEM_TIME message and return componentized seconds
     def _process_system_time(self, msg):
+        # Cannot use if the message has a zero time in it
+        if msg.time_unix_usec == 0:
+            return None
+
+        # Get local system time for calculations
         local_time = time.time()
 
         # Calculate adjusted autopilot time, accounting for processing latencies
@@ -251,7 +256,7 @@ class MAVLinkBridge(object):
 
         # If tracking time delta, update the delta
         # Using simplified numerical solution, but really local_time - adjusted_time
-        if self.track_time_delta and msg.time_unix_usec > 0:
+        if self.track_time_delta:
             self.ap_time_delta = rospy.Time.from_sec(0.0 - snd_rcv_time)
 
         # Record the time at which the autopilot booted (when time_boot_ms == 0)
@@ -272,6 +277,8 @@ class MAVLinkBridge(object):
             if msg.time_unix_usec:
                 break
         t = self._process_system_time(msg)
+        if t is None:
+            return False
         return not bool(os.system("sudo date -s '@%f'" % t))
 
     # Handle a received MAVLink message
