@@ -182,7 +182,7 @@ def sub_payload_waypoint(message, bridge):
 
 def init(bridge):
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
-    bridge.add_mavlink_event("GLOBAL_POS_ATT_NED_COV", pub_pose_att_vel)
+    bridge.add_mavlink_event("GLOBAL_POS_ATT_NED", pub_pose_att_vel)
     bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard, log=False)
     bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground, log=False)
     bridge.add_ros_sub_event("calpress", stdmsg.Empty, sub_calpress)
