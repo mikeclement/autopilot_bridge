@@ -291,6 +291,13 @@ class MAVLinkBridge(object):
         elif msg_type == "SYSTEM_TIME":
             self._process_system_time(msg)
 
+        # If you *really* want to see what's coming out of mavlink
+        if self.spam_mavlink:
+            print msg_type + " @ " + str(msg._timestamp) + ":\n  " \
+                + "\n  ".join("%s: %s" % (k, v) for (k, v) \
+                              in sorted(vars(msg).items()) \
+                              if not k.startswith('_'))
+
         # Run any all-types events
         for ev in self.mav_events_all:
             try:
@@ -308,13 +315,6 @@ class MAVLinkBridge(object):
             except Exception as ex:
                 rospy.logwarn("MAVLink event error (%s): %s" % \
                               (msg_type, ex.args[0]))
-
-        # If you *really* want to see what's coming out of mavlink
-        if self.spam_mavlink:
-            print msg_type + " @ " + str(msg._timestamp) + ":\n  " \
-                + "\n  ".join("%s: %s" % (k, v) for (k, v) \
-                              in sorted(vars(msg).items()) \
-                              if not k.startswith('_'))
 
     # Handle timed events
     def _handle_timed(self):
