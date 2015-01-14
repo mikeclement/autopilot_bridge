@@ -237,7 +237,7 @@ if __name__ == '__main__':
                 loaded_modules[m_name] = m_obj.init(bridge)
                 print "Module '%s' loaded successfully" % m_name
             except Exception as ex:
-                print "Failed to load module '%s': %s" % (m_name, ex.args[0])
+                print "Failed to load module '%s': %s" % (m_name, str(ex.args[0]))
 
     # Start loop (this won't return until we terminate or ROS shuts down)
     print "Starting autopilot bridge loop...\n"
@@ -246,6 +246,6 @@ if __name__ == '__main__':
             bridge.run_loop()
             break  # If loop legitimately returned, we'll exit
         except Exception as ex:
-            print "MAVLinkBridge Loop Error: " + ex.args[0]
+            print "MAVLinkBridge Loop Error: " + str(ex.args[0])
             print "...restarting loop..."
 
