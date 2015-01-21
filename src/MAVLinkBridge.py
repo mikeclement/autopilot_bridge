@@ -138,9 +138,9 @@ class MAVLinkBridge(object):
     # Get a ROS publisher for a given topic (within basename) and message type
     # If matching publisher exists, it is returned; otherwise it is created.
     # Enforces one message type per topic
-    # NOTE: Can pass optional args to rospy.Publisher() in *pub_args;
+    # NOTE: Can pass optional args to rospy.Publisher() in **pub_args;
     #  of course, all users of the publisher will be subject to same options
-    def get_ros_pub(self, topic, topic_type, *pub_args):
+    def get_ros_pub(self, topic, topic_type, **pub_args):
         if topic in self.ros_pubs:
             (t_type, t_pub) = self.ros_pubs[topic]
             if t_type == topic_type:
@@ -149,7 +149,7 @@ class MAVLinkBridge(object):
                 raise Exception("topic '%s' already registered with a different type" % topic)
         else:
             try:
-                pub = rospy.Publisher("%s/%s"%(self.basename, topic), topic_type, *pub_args)
+                pub = rospy.Publisher("%s/%s"%(self.basename, topic), topic_type, **pub_args)
                 self.ros_pubs[topic] = (topic_type, pub)
                 return pub
             except Exception as ex:
