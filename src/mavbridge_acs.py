@@ -34,7 +34,7 @@ mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
 # MAVLink message handlers
 
 def pub_pose_att_vel(msg_type, msg, bridge):
-    pub = bridge.get_ros_pub("acs_pose", apmsg.Geodometry, queue_size=10)
+    pub = bridge.get_ros_pub("acs_pose", apmsg.Geodometry, queue_size=1)
     odom = apmsg.Geodometry()
     odom.header.stamp = bridge.project_ap_time(msg)
     odom.header.frame_id = 'base_footprint'

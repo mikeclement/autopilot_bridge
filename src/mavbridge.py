@@ -81,7 +81,7 @@ def sub_waypoint_goto(message, bridge):
 
 # Publish an Imu message
 def pub_imu(msg_type, msg, bridge):
-    pub = bridge.get_ros_pub("imu", Imu, queue_size=10)
+    pub = bridge.get_ros_pub("imu", Imu, queue_size=1)
     imu = Imu()
     imu.header.stamp = bridge.project_ap_time(msg)
     imu.header.frame_id = 'base_footprint'
@@ -100,7 +100,7 @@ def pub_imu(msg_type, msg, bridge):
 
 # Publish GPS data in NavSatFix form
 def pub_gps(msg_type, msg, bridge):
-    pub = bridge.get_ros_pub("gps", NavSatFix, queue_size=10)
+    pub = bridge.get_ros_pub("gps", NavSatFix, queue_size=1)
     fix = NavSatFix()
     fix.header.stamp = bridge.project_ap_time(msg)
     fix.header.frame_id = 'base_footprint'
@@ -115,7 +115,7 @@ def pub_gps(msg_type, msg, bridge):
                 
 # Publish GPS data in Odometry form
 def pub_gps_odom(msg_type, msg, bridge):
-    pub = bridge.get_ros_pub("gps_odom", Odometry, queue_size=10)
+    pub = bridge.get_ros_pub("gps_odom", Odometry, queue_size=1)
     odom = Odometry()
     odom.header.stamp = bridge.project_ap_time(msg)
     odom.header.frame_id = 'base_footprint'
