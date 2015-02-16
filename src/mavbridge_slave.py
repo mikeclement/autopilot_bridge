@@ -113,5 +113,5 @@ def init(bridge):
     s_obj = mavbridge_slave(bridge.master)
     bridge.add_mavlink_event("*", s_obj.mav_message)
     bridge.add_ros_srv_event("slave_setup", apsrv.SlaveSetup, s_obj.srv_setup)
-    bridge.add_timed_event(0, s_obj.timed_message)
+    bridge.add_timed_event(20, s_obj.timed_message)
     return s_obj
