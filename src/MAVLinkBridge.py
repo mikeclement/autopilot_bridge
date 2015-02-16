@@ -319,10 +319,11 @@ class MAVLinkBridge(object):
     # Handle timed events
     def _handle_timed(self):
         t = time.time()
-        for ev in [ev for ev in self.timed_events if ev.due(t)]:
-            # NOTE: technically, want to use the time when the event
-            # actually ran, but this is slightly more efficient.
-            ev.run(self, t)
+        for ev in self.timed_events:
+            if ev.due(t):
+                # NOTE: technically, want to use the time when the event
+                # actually ran, but this is slightly more efficient.
+                ev.run(self, t)
 
     # Main loop that receives and handles mavlink messages
     def _mainloop(self):
