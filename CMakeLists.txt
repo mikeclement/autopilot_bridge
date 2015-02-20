@@ -29,6 +29,7 @@ add_service_files(
   ParamSet.srv
   SlaveSetup.srv
   WPGetAll.srv
+  WPGetRange.srv
   WPSetAll.srv
 )
 
