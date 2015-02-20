@@ -52,18 +52,20 @@ class MAVLinkBridge(object):
     ### Initialization ###
 
     def __init__(self, device, baudrate,
-                 basename='autopilot',
-                 mavlink_rate=10.0,
-                 loop_rate=50.0,
-                 sync_local_clock=False,
-                 track_time_delta=False,
-                 spam_mavlink=False):
+                 basename='autopilot',     # ROS topic basename
+                 mavlink_rate=10.0,        # MAVLink message request rate (Hz)
+                 loop_rate=50.0,           # Nominal internal loop rate (Hz)
+                 sync_local_clock=False,   # Sync system time from SYSTEM_TIME
+                 track_time_delta=False,   # Try to adjust timestamps for AP drift
+                 serial_relief=0,          # Limit serial backlog size (bytes)
+                 spam_mavlink=False):      # Print ALL MAVLink messages
 
         # Settings that get used later
         self.basename = basename
         self.spam_mavlink = spam_mavlink
         self.loop_rate = loop_rate
         self.track_time_delta=track_time_delta
+        self.serial_relief = serial_relief
 
         # Internal variables
         self.master = None
@@ -326,11 +328,29 @@ class MAVLinkBridge(object):
                 # actually ran, but this is slightly more efficient.
                 ev.run(self, t)
 
+    # Cope with system saturation by reading and discarding data
+    # when serial connection gets overwhelmed, such as by rosbag
+    # NOTE: This is ugly since it relies on the internals of
+    # pymavlink; if those change, this will break.
+    def _handle_serial_relief(self, maxbytes):
+        if not isinstance(self.master, mavutil.mavserial):
+            return
+        try:
+            waiting = self.master.port.inWaiting()
+            if waiting > maxbytes:
+                self.master.port.read(waiting - maxbytes)
+        except Exception as ex:
+            rospy.logwarn("Serial relief error: " + str(ex.args[0]))
+
     # Main loop that receives and handles mavlink messages
     def _mainloop(self):
         # Try to run this loop at >= LOOP_RATE Hz
         r = rospy.Rate(self.loop_rate)
         while not rospy.is_shutdown():
+            # Try to keep serial line from being overwhelmed
+            if self.serial_relief:
+                self._handle_serial_relief(self.serial_relief)
+
             # Check for a MAVLink message
             msg = None
             try:
