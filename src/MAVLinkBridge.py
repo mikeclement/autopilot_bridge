@@ -42,7 +42,7 @@ class MLBTimedEvent(object):
         self._callback(bridge)
         if not t:
             t = time.time()
-        self._next_time = t + self._interval
+        self._next_time += self._interval
 
 #-----------------------------------------------------------------------
 # Class that wraps mavlink connection object
@@ -317,8 +317,9 @@ class MAVLinkBridge(object):
                               (msg_type, ex.args[0]))
 
     # Handle timed events
-    def _handle_timed(self):
-        t = time.time()
+    def _handle_timed(self, t=None):
+        if not t:
+            t = time.time()
         for ev in self.timed_events:
             if ev.due(t):
                 # NOTE: technically, want to use the time when the event
