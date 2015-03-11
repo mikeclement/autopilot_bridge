@@ -28,6 +28,7 @@ add_service_files(
   ParamGetList.srv
   ParamSet.srv
   SlaveSetup.srv
+  TimedAction.srv
   WPGetAll.srv
   WPGetRange.srv
   WPSetAll.srv
