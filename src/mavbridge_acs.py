@@ -15,6 +15,8 @@
 from pymavlink import mavutil
 import std_msgs.msg as stdmsg
 import autopilot_bridge.msg as apmsg
+import autopilot_bridge.srv as apsrv
+import time
 
 #-----------------------------------------------------------------------
 # Ugly globals
@@ -32,6 +34,11 @@ mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
 
 #-----------------------------------------------------------------------
 # MAVLink message handlers
+
+def mav_statustext(msg_type, msg, bridge):
+    # Sets the flag for calibration service (see below)
+    if str(msg.text) == "zero airspeed calibrated":
+        srv_calpress.done = True
 
 def pub_pose_att_vel(msg_type, msg, bridge):
     pub = bridge.get_ros_pub("acs_pose", apmsg.Geodometry, queue_size=1)
@@ -103,6 +110,29 @@ def pub_status(msg_type, msg, bridge):
     pub.publish(sta)
 
 #-----------------------------------------------------------------------
+# ROS service handlers
+
+def srv_calpress(req, bridge):
+    # User must supply a positive timeout in seconds
+    if req.timeout <= 0:
+        return { 'ok' : False }
+
+    # Reset attribute and command AP to calibrate
+    srv_calpress.done = False
+    bridge.master.calibrate_pressure()
+
+    # Cycle, waiting for flag to be raised (see mavlink handler above)
+    end_time = time.time() + req.timeout
+    while time.time() < end_time:
+        if srv_calpress.done:
+            return { 'ok' : True }
+        time.sleep(0.5)  # NOTE: may round to next 0.5s increment
+    return { 'ok' : False }
+
+# Initialize attribute
+srv_calpress.done = False
+
+#-----------------------------------------------------------------------
 # ROS subscriber handlers
 
 # Purpose: Payload-to-autopilot heartbeast, indicates payload is healthy
@@ -122,11 +152,6 @@ def sub_heartbeat_ground(message, bridge):
         mavutil.mavlink.MAV_TYPE_GCS,
         mavutil.mavlink.MAV_TYPE_GENERIC,
         0, 0, 0)
-
-# Purpose: Initiate barometer calibration
-# Fields: None
-def sub_calpress(message, bridge):
-    bridge.master.calibrate_pressure()
 
 # Purpose: Changes autopilot mode
 # (must be in mode_mapping dictionary)
@@ -181,11 +206,12 @@ def sub_payload_waypoint(message, bridge):
 # init()
 
 def init(bridge):
+    bridge.add_mavlink_event("STATUSTEXT", mav_statustext)
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
     bridge.add_mavlink_event("GLOBAL_POS_ATT_NED", pub_pose_att_vel)
+    bridge.add_ros_srv_event("calpress", apsrv.TimedAction, srv_calpress)
     bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard, log=False)
     bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground, log=False)
-    bridge.add_ros_sub_event("calpress", stdmsg.Empty, sub_calpress)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
     bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)
     bridge.add_ros_sub_event("land_abort", stdmsg.UInt16, sub_landing_abort)
