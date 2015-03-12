@@ -6,6 +6,10 @@
 #
 # Originally developed by Mike Clement, 2014
 #
+# NOTE: This is considered "old" code; it has more functionality than
+# what is provided in the 'fpr' module, but at the cost of complexity.
+# DON'T LOAD THIS MODULE IF LOADING THE 'fpr' MODULE!
+#
 # This software may be freely used, modified, and distributed.
 # This software comes with no warranty.
 
