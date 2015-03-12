@@ -1,0 +1,199 @@
+#!/usr/bin/env python
+
+#-----------------------------------------------------------------------
+# ROS-MAVLink Bridge node
+# Fence, Param, and Rally handling
+#
+# Originally developed by Mike Clement, 2015
+#
+# NOTE: This replaces, or acts in place of, the 'param' module; for now,
+# the 'param' module is still usable, but should *not* be loaded at the
+# same time as this module!
+#
+# This software may be freely used, modified, and distributed.
+# This software comes with no warranty.
+
+#-----------------------------------------------------------------------
+# Import libraries
+
+import rospy
+from pymavlink import mavutil
+import autopilot_bridge.msg as apmsg
+import autopilot_bridge.srv as apsrv
+import time
+from threading import RLock
+
+#-----------------------------------------------------------------------
+# Class to manipulate fence
+
+class mavbridge_fence(object):
+    def __init__(self, master):
+        self._master = master
+
+        # Locks to prevent multiple get/set calls from racing
+        self._param_lock = RLock()
+        self._fence_lock = RLock()
+        self._rally_lock = RLock()
+
+        # Stores for MAVLink handlers to cache received data
+        self._params = {}        # str -> float
+        self._fence_points = {}  # int -> MAVLink_fence_point_message
+        self._rally_points = {}  # int -> MAVLink_rally_point_message
+
+    def _get_item(self, index, store, fetch_cb, tries=3, wait=0.1, force=True):
+        '''generic fetch function'''
+        if index in store:
+            if force: del store[index]
+            else: return store[index]
+        for i in range(tries):
+            fetch_cb()
+            time.sleep(wait)
+            if index in store: return store[index]
+        return None
+
+    def _set_item(self, set_cb, fetch_cb, check_cb=None, tries=3, wait=0.1):
+        '''generic set function'''
+        for i in range(tries):
+            set_cb()
+            time.sleep(wait)  # Extra time for set to be processed
+            val = fetch_cb()
+            if val is None:
+                continue
+            if callable(check_cb) and not check_cb(val):
+                continue
+            return True
+        return False
+
+    def _get_param(self, name, tries=3, force=True):
+        '''fetch a parameter by name'''
+        with self._param_lock:
+            pn = str(name).upper()
+            f = lambda : self._master.param_fetch_one(pn)
+            return self._get_item(pn, self._params, f,
+                                  tries=tries, force=force)
+
+    def _set_param(self, name, value, tries=3):
+        '''set a parameter'''
+        with self._param_lock:
+            pn = str(name).upper()
+            pv = float(value)
+            s = lambda : self._master.param_set_send(pn, pv)
+            f = lambda : self._get_param(pn, tries=1, force=False)
+            c = lambda v: bool(v == pv)
+            if pn in self._params: del self._params[pn]
+            return self._set_item(s, f, c, tries=tries)
+
+    def _get_fence_point(self, index, tries=3, force=True):
+        '''fetch a fence point by index'''
+        with self._fence_lock:
+            f = lambda : self._master.mav.fence_fetch_point_send( \
+                             self._master.target_system,
+                             self._master.target_component,
+                             index)
+            return self._get_item(index, self._fence_points, f,
+                                  tries=tries, force=force)
+
+    def _set_fence_point(self, p, tries=3):
+        '''set a fence point'''
+        with self._fence_lock:
+            s = lambda : self._master.mav.send(p)
+            f = lambda : self._get_fence_point(p.idx)
+            # Check condition taken from MAVProxy's fence module
+            c = lambda v: bool(abs(v.lat - p.lat) < 0.00003 and 
+                               abs(v.lng - p.lng) < 0.00003)
+            if pn in self._fence_points: del self._fence_points[pn]
+            return self._set_item(s, f, c, tries=tries)
+
+    def _get_rally_point(self, index, tries=3, force=True):
+        '''fetch a rally point by index'''
+        with self._rally_lock:
+            f = lambda : self._master.mav.rally_fetch_point_send( \
+                             self._master.target_system,
+                             self._master.target_component,
+                             index)
+            return self._get_item(index, self._rally_points, f,
+                                  tries=tries, force=force)
+
+    def _set_rally_point(self, p, tries=3):
+        '''set a rally point'''
+        with self._rally_lock:
+            s = lambda : self._master.mav.send(p)
+            f = lambda : self._get_rally_point(p.idx)
+            # Check condition taken from MAVProxy's fence module
+            c = lambda v: bool(abs(v.lat - p.lat) < 0.00003 and 
+                               abs(v.lng - p.lng) < 0.00003 and
+                               abs(v.alt - p.alt) < 0.00003 and
+                               abs(v.break_alt - p.break_alt) < 0.00003 and
+                               abs(v.break_alt - p.break_alt) < 0.00003 and
+                               abs(v.land_dir - p.land_dir) < 0.00003 and
+                               v.flags == p.flags)
+            if pn in self._rally_points: del self._rally_points[pn]
+            return self._set_item(s, f, c, tries=tries)
+
+    '''API'''
+
+    def mav_param_value(self, msg_type, msg, bridge):
+        '''handle PARAM_VALUE messages (needed by _get_param())'''
+        pn = str(msg.param_id).upper()
+        pv = float(msg.param_value)
+        self._params[pn] = pv
+
+    def mav_fence_point(self, msg_type, msg, bridge):
+        '''handle FENCE_POINT messages (needed by _get_fence_point())'''   
+        self._fence_points[msg.idx] = msg
+
+    def mav_rally_point(self, msg_type, msg, bridge):
+        '''handle RALLY_POINT messages (needed by _get_rally_point())'''   
+        self._rally_points[msg.idx] = msg
+
+    def srv_param_get(self, req, bridge):
+        '''service to get a parameter by name'''
+        val = self._get_param(req.name)
+        if val is None:
+            return { 'ok' : False, 'value' : 0.0 }
+        return { 'ok' : True, 'value' : val }
+
+    def srv_param_set(self, req, bridge):
+        '''service to set a parameter'''
+        res = self._set_param(req.name, req.value)
+        return { 'ok' : res }
+
+    def srv_fence_getall(self, req, bridge):
+        '''service to get list of fence points'''
+        # Since we're doing several interdependent ops, get the lock up front
+        with self._fence_lock:
+            pass
+
+    def srv_fence_setall(self, req, bridge):
+        '''service to set list of fence points'''
+        # Since we're doing several interdependent ops, get the lock up front
+        with self._fence_lock:
+            pass
+
+    def srv_rally_getall(self, req, bridge):
+        '''service to get list of rally points'''
+        # Since we're doing several interdependent ops, get the lock up front
+        with self._rally_lock:
+            pass
+
+    def srv_rally_setall(self, req, bridge):
+        '''service to set list of rally points'''
+        # Since we're doing several interdependent ops, get the lock up front
+        with self._rally_lock:
+            pass
+
+#-----------------------------------------------------------------------
+# init()
+
+def init(bridge):
+    obj = mavbridge_fence(bridge.master)
+    bridge.add_mavlink_event("PARAM_VALUE", obj.mav_param_value)
+    bridge.add_mavlink_event("FENCE_POINT", obj.mav_fence_point)
+    bridge.add_mavlink_event("RALLY_POINT", obj.mav_rally_point)
+    bridge.add_ros_srv_event("param_get", apsrv.ParamGet, obj.srv_param_get)
+    bridge.add_ros_srv_event("param_set", apsrv.ParamSet, obj.srv_param_set)
+    #bridge.add_ros_srv_event("fence_getall", apsrv.FenceGetAll, obj.srv_fence_getall)
+    #bridge.add_ros_srv_event("fence_setall", apsrv.FenceGetAll, obj.srv_fence_setall)
+    #bridge.add_ros_srv_event("rally_getall", apsrv.FenceGetAll, obj.srv_rally_getall)
+    #bridge.add_ros_srv_event("rally_setall", apsrv.FenceGetAll, obj.srv_rally_setall)
+    return obj
