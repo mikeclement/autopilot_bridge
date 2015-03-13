@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 add_message_files(
   FILES
+  Fencepoint.msg
   GeoPoint.msg
   GeoPose.msg
   GeoPoseWithCovariance.msg
@@ -18,15 +19,20 @@ add_message_files(
   Heartbeat.msg
   LLA.msg
   ParamPair.msg
+  Rallypoint.msg
   Status.msg
   Waypoint.msg
 )
 
 add_service_files(
   FILES
+  FenceGetAll.srv
+  FenceSetAll.srv
   ParamGet.srv
   ParamGetList.srv
   ParamSet.srv
+  RallyGetAll.srv
+  RallySetAll.srv
   SlaveSetup.srv
   TimedAction.srv
   WPGetAll.srv
