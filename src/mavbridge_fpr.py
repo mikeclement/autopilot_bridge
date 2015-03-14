@@ -101,7 +101,7 @@ class mavbridge_fence(object):
             # Check condition taken from MAVProxy's fence module
             c = lambda v: bool(abs(v.lat - p.lat) < 0.00003 and 
                                abs(v.lng - p.lng) < 0.00003)
-            if pn in self._fence_points: del self._fence_points[pn]
+            if p.idx in self._fence_points: del self._fence_points[p.idx]
             return self._set_item(s, f, c, tries=tries)
 
     def _get_rally_point(self, index, tries=3, force=True):
@@ -127,8 +127,43 @@ class mavbridge_fence(object):
                                abs(v.break_alt - p.break_alt) < 0.00003 and
                                abs(v.land_dir - p.land_dir) < 0.00003 and
                                v.flags == p.flags)
-            if pn in self._rally_points: del self._rally_points[pn]
+            if p.idx in self._rally_points: del self._rally_points[p.idx]
             return self._set_item(s, f, c, tries=tries)
+
+    def _getall_points(self, count_param, fetch_cb, point_cb):
+        '''ROS get-all wrapper for _get_*_point()'''
+        try:
+            points = []
+            count = self._get_param(count_param)
+            if count is None:  # Couldn't get param -> FAIL
+                return { 'ok' : False, 'points' : [] }
+            if count == 0.0:  # No fence points -> OK
+                return { 'ok' : True, 'points' : [] }
+            for c in range(int(count)):
+                p = fetch_cb(c)
+                if p is None or int(p.count) != count:
+                    return { 'ok' : False, 'points' : [] }
+                points.append(point_cb(p))
+            return { 'ok' : True, 'points' : points }
+        except Exception as ex:
+            return { 'ok' : False, 'points' : [] }
+
+    def _setall_points(self, pre_cb, points, point_cb, set_cb, post_cb):
+        '''ROS set-all wrapper for _set_*_point()'''
+        try:
+            if len(points) == 0:
+                return { 'ok' : False }
+            pre_val = pre_cb()
+            if pre_val is None:
+                return { 'ok' : False }
+            for i in range(len(points)):
+                p = point_cb(i, points[i])
+                p.count = len(points)
+                if set_cb(p) is False:
+                    return { 'ok' : False }
+            return { 'ok' : post_cb(pre_val) }
+        except Exception as ex:
+            return { 'ok' : False }
 
     '''API'''
 
@@ -162,25 +197,67 @@ class mavbridge_fence(object):
         '''service to get list of fence points'''
         # Since we're doing several interdependent ops, get the lock up front
         with self._fence_lock:
-            pass
+            p = lambda i: apmsg.Fencepoint(i.lat, i.lng)
+            return self._getall_points('FENCE_TOTAL', self._get_fence_point, p)
 
     def srv_fence_setall(self, req, bridge):
         '''service to set list of fence points'''
         # Since we're doing several interdependent ops, get the lock up front
+        # NOTE: If this service fails, we don't guarantee the fence state
         with self._fence_lock:
-            pass
+            def pre():
+                action = self._get_param('FENCE_ACTION')
+                if action is None:
+                    return None
+                if self._set_param('FENCE_ACTION',
+                                   mavutil.mavlink.FENCE_ACTION_NONE) is False:
+                    return None
+                if self._set_param('FENCE_TOTAL', len(req.points)) is False:
+                    return None
+                return action
+            pf = lambda i,p: mavutil.mavlink.MAVLink_fence_point_message( \
+                                 self._master.target_system,
+                                 self._master.target_component,
+                                 i,
+                                 0,
+                                 p.lat,
+                                 p.lon)
+            def post(action):
+                return self._set_param('FENCE_ACTION', action)
+            return self._setall_points(pre, req.points, pf,
+                                       self._set_fence_point, post)
 
     def srv_rally_getall(self, req, bridge):
         '''service to get list of rally points'''
         # Since we're doing several interdependent ops, get the lock up front
         with self._rally_lock:
-            pass
+            p = lambda i: apmsg.Rallypoint(i.lat, i.lng, i.alt,
+                                           i.break_alt, i.land_dir, i.flags)
+            return self._getall_points('RALLY_TOTAL', self._get_rally_point, p)
 
     def srv_rally_setall(self, req, bridge):
         '''service to set list of rally points'''
         # Since we're doing several interdependent ops, get the lock up front
+        # NOTE: If this service fails, we don't guarantee the rally state
         with self._rally_lock:
-            pass
+            def pre():
+                if self._set_param('RALLY_TOTAL', len(req.points)) is False:
+                    return None
+                return True
+            pf = lambda i,p: mavutil.mavlink.MAVLink_rally_point_message( \
+                                 self._master.target_system,
+                                 self._master.target_component,
+                                 i,
+                                 0,
+                                 p.lat,
+                                 p.lon,
+                                 p.alt,
+                                 p.break_alt,
+                                 p.land_dir,
+                                 p.flags)
+            post = lambda x: True
+            return self._setall_points(pre, req.points, pf,
+                                       self._set_rally_point, post)
 
 #-----------------------------------------------------------------------
 # init()
@@ -192,8 +269,8 @@ def init(bridge):
     bridge.add_mavlink_event("RALLY_POINT", obj.mav_rally_point)
     bridge.add_ros_srv_event("param_get", apsrv.ParamGet, obj.srv_param_get)
     bridge.add_ros_srv_event("param_set", apsrv.ParamSet, obj.srv_param_set)
-    #bridge.add_ros_srv_event("fence_getall", apsrv.FenceGetAll, obj.srv_fence_getall)
-    #bridge.add_ros_srv_event("fence_setall", apsrv.FenceGetAll, obj.srv_fence_setall)
-    #bridge.add_ros_srv_event("rally_getall", apsrv.FenceGetAll, obj.srv_rally_getall)
-    #bridge.add_ros_srv_event("rally_setall", apsrv.FenceGetAll, obj.srv_rally_setall)
+    bridge.add_ros_srv_event("fence_getall", apsrv.FenceGetAll, obj.srv_fence_getall)
+    bridge.add_ros_srv_event("fence_setall", apsrv.FenceSetAll, obj.srv_fence_setall)
+    bridge.add_ros_srv_event("rally_getall", apsrv.RallyGetAll, obj.srv_rally_getall)
+    bridge.add_ros_srv_event("rally_setall", apsrv.RallySetAll, obj.srv_rally_setall)
     return obj
