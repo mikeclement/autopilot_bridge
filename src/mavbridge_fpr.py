@@ -24,9 +24,9 @@ import time
 from threading import RLock
 
 #-----------------------------------------------------------------------
-# Class to manipulate fence
+# Class to manipulate fences, params, and rally points
 
-class mavbridge_fence(object):
+class mavbridge_fpr(object):
     def __init__(self, master):
         self._master = master
 
@@ -40,7 +40,7 @@ class mavbridge_fence(object):
         self._fence_points = {}  # int -> MAVLink_fence_point_message
         self._rally_points = {}  # int -> MAVLink_rally_point_message
 
-    def _get_item(self, index, store, fetch_cb, tries=3, wait=0.1, force=True):
+    def _get_item(self, index, store, fetch_cb, tries=10, wait=0.2, force=True):
         '''generic fetch function'''
         if index in store:
             if force: del store[index]
@@ -51,7 +51,7 @@ class mavbridge_fence(object):
             if index in store: return store[index]
         return None
 
-    def _set_item(self, set_cb, fetch_cb, check_cb=None, tries=3, wait=0.1):
+    def _set_item(self, set_cb, fetch_cb, check_cb=None, tries=10, wait=0.2):
         '''generic set function'''
         for i in range(tries):
             set_cb()
@@ -64,7 +64,7 @@ class mavbridge_fence(object):
             return True
         return False
 
-    def _get_param(self, name, tries=3, force=True):
+    def _get_param(self, name, tries=10, force=True):
         '''fetch a parameter by name'''
         with self._param_lock:
             pn = str(name).upper()
@@ -72,7 +72,7 @@ class mavbridge_fence(object):
             return self._get_item(pn, self._params, f,
                                   tries=tries, force=force)
 
-    def _set_param(self, name, value, tries=3):
+    def _set_param(self, name, value, tries=10):
         '''set a parameter'''
         with self._param_lock:
             pn = str(name).upper()
@@ -83,7 +83,7 @@ class mavbridge_fence(object):
             if pn in self._params: del self._params[pn]
             return self._set_item(s, f, c, tries=tries)
 
-    def _get_fence_point(self, index, tries=3, force=True):
+    def _get_fence_point(self, index, tries=10, force=True):
         '''fetch a fence point by index'''
         with self._fence_lock:
             f = lambda : self._master.mav.fence_fetch_point_send( \
@@ -93,7 +93,7 @@ class mavbridge_fence(object):
             return self._get_item(index, self._fence_points, f,
                                   tries=tries, force=force)
 
-    def _set_fence_point(self, p, tries=3):
+    def _set_fence_point(self, p, tries=10):
         '''set a fence point'''
         with self._fence_lock:
             s = lambda : self._master.mav.send(p)
@@ -104,7 +104,7 @@ class mavbridge_fence(object):
             if p.idx in self._fence_points: del self._fence_points[p.idx]
             return self._set_item(s, f, c, tries=tries)
 
-    def _get_rally_point(self, index, tries=3, force=True):
+    def _get_rally_point(self, index, tries=10, force=True):
         '''fetch a rally point by index'''
         with self._rally_lock:
             f = lambda : self._master.mav.rally_fetch_point_send( \
@@ -114,7 +114,7 @@ class mavbridge_fence(object):
             return self._get_item(index, self._rally_points, f,
                                   tries=tries, force=force)
 
-    def _set_rally_point(self, p, tries=3):
+    def _set_rally_point(self, p, tries=10):
         '''set a rally point'''
         with self._rally_lock:
             s = lambda : self._master.mav.send(p)
@@ -263,7 +263,7 @@ class mavbridge_fence(object):
 # init()
 
 def init(bridge):
-    obj = mavbridge_fence(bridge.master)
+    obj = mavbridge_fpr(bridge.master)
     bridge.add_mavlink_event("PARAM_VALUE", obj.mav_param_value)
     bridge.add_mavlink_event("FENCE_POINT", obj.mav_fence_point)
     bridge.add_mavlink_event("RALLY_POINT", obj.mav_rally_point)
