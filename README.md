@@ -13,7 +13,7 @@ and tested under both Indigo and Hydro._
 
 While the full desktop version of ROS is recommended, the "base" install
 should work for most cases. Some additional packages may be required,
-such as sensor messages (ros-hydro-sensor-msgs on an Ubuntu-esque system).
+such as sensor messages (ros-\*-sensor-msgs on an Ubuntu-esque system).
 
 Second, you will need autopilot protocol-specific software.
 
@@ -28,13 +28,13 @@ cd mavlink/pymavlink
 python setup.py build install --user
 ```
 
-Note that features in some modules (e.g. acs) rely on customized branches
+Note that features in some modules (e.g., 'acs') rely on customized branches
 of mavlink. However, the base code should always run with the master branch.
 
 ## Installation
 
 You will want to follow the typical steps for creating a ROS workspace
-(see http://wiki.ros.org/catkin/Tutorials/create\_a\_workspace for details).
+(see http://wiki.ros.org/catkin/Tutorials/create_a_workspace for details).
 
 In summary:
 
@@ -72,18 +72,19 @@ rosrun autopilot_bridge mavbridge.py [options ...]
 You can specify --help at the end of the command to see all options.
 Generally, you will want to specify the device or network connection using `-d` or `--device`.
 If omitted, mavbridge will attempt to autodetect a serial device.
+Serial link speed can be specified using `-b` or `--baudrate`.
 
 To run over serial device /dev/ttyS3 at 57600 baud:
 
 ```bash
-rosrun autopilot_bridge mavbridge.py --device /dev/ttyS3 --baudrate 57600
+rosrun autopilot_bridge mavbridge.py -d /dev/ttyS3 -b 57600
 ```
 
 To run over a TCP connection to a Simulation-In-The-Loop (SITL) instance running
 locally on port 5762:
 
 ```bash
-rosrun autopilot_bridge mavbridge.py --device tcp:127.0.0.1:5762
+rosrun autopilot_bridge mavbridge.py -d tcp:127.0.0.1:5762
 ```
 
 Some additional options:
@@ -114,7 +115,7 @@ Modules can be loaded with the `-m` or `--module` option.
 For instance, to run mavbridge.py with the 'wp' module:
 
 ```bash
-rosrun autopilot_bridge mavbridge.py --device /dev/ttyS3 --baudrate 57600 --module param
+rosrun autopilot_bridge mavbridge.py -d /dev/ttyS3 -b 57600 -m wp
 ```
 
 The `-m` option can be used multiple times, and `mavbridge.py` will report to stdout
@@ -178,7 +179,7 @@ on specifying service requests and using responses.
 subscribers, and services easy. It is intentionally designed to allow the writer
 to choose either a procedural or an object-oriented style for each module.
 
-Each module must reside in its own file, such that module 'foo' is in `mavbridge\_foo.py`.
+Each module must reside in its own file, such that module 'foo' is in `mavbridge_foo.py`.
 Inside the module, there must exist the following function:
 
 ```python
