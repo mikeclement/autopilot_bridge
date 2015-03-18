@@ -79,7 +79,7 @@ class mavbridge_fpr(object):
             pv = float(value)
             s = lambda : self._master.param_set_send(pn, pv)
             f = lambda : self._get_param(pn, tries=1, force=False)
-            c = lambda v: bool(v == pv)
+            c = lambda v: bool(abs(v - pv) < 0.00003)
             if pn in self._params: del self._params[pn]
             return self._set_item(s, f, c, tries=tries)
 
