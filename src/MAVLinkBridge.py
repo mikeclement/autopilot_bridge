@@ -13,7 +13,6 @@
 # Import libraries
 
 # Python imports
-from optparse import OptionParser
 import os
 import time
 
@@ -56,7 +55,6 @@ class MAVLinkBridge(object):
                  mavlink_rate=10.0,        # MAVLink message request rate (Hz)
                  loop_rate=50.0,           # Nominal internal loop rate (Hz)
                  sync_local_clock=False,   # Sync system time from SYSTEM_TIME
-                 track_time_delta=False,   # Try to adjust timestamps for AP drift
                  serial_relief=0,          # Limit serial backlog size (bytes)
                  spam_mavlink=False):      # Print ALL MAVLink messages
 
@@ -64,8 +62,8 @@ class MAVLinkBridge(object):
         self.basename = basename
         self.spam_mavlink = spam_mavlink
         self.loop_rate = loop_rate
-        self.track_time_delta=track_time_delta
         self.serial_relief = serial_relief
+        self.mavlink_rate = mavlink_rate
 
         # Internal variables
         self.master = None
@@ -75,7 +73,6 @@ class MAVLinkBridge(object):
         self.ros_srv_events = {}
         self.ros_pubs = {}
         self.timed_events = []
-        self.ap_time_delta = rospy.Duration(0, 0)
         self.ap_boot_time = None
 
         # Initialize ROS node
@@ -91,43 +88,25 @@ class MAVLinkBridge(object):
                 device,
                 int(baudrate),
                 autoreconnect=True)
-
-            # Wait for a heartbeat so we know the target system IDs
-            self.master.wait_heartbeat()
-
-            # Set up output stream from master
-            self.master.mav.request_data_stream_send(
-                self.master.target_system,
-                self.master.target_component,
-                mavutil.mavlink.MAV_DATA_STREAM_ALL,
-                mavlink_rate,
-                1)
+            # Perform internal initialization
+            self._init_stream()
+            self._init_time(sync_local_clock)
         except Exception as ex:
             raise Exception("MAVLink init error: " + str(ex.args[0]))
-
-        # If requested, attempt to sync local clock to autopilot
-        if (sync_local_clock):
-            rospy.loginfo("Waiting for nonzero SYSTEM_TIME message to sync local clock...")
-            if self._sync_local_clock():
-                rospy.loginfo("Successfully synced local clock.")
-            else:
-                rospy.logwarn("Failed to sync local clock!")
-        else:
-            rospy.logwarn("Warning: local clock may differ from autopilot time.")
 
     ### Useful functions for modular handlers ###
 
     # Return projected current time of AP (UTC) as rospy.Time object
     # If a MAVLink message object with the 'time_boot_ms' attribute is given,
-    #   project the actual AP time using the boot-time offset.
+    #   project the actual message time using the boot-time offset.
     # Otherwise, use current system time as the basis.
-    # If track_time_delta is True, make adjustment based on timing observations
     def project_ap_time(self, msg=None):
-        if msg is not None and self.ap_boot_time is not None and hasattr(msg, 'time_boot_ms'):
-            t = self.ap_boot_time + rospy.Duration.from_sec(float(msg.time_boot_ms) / 1e03)
-        else:
-            t = rospy.Time.now()
-        return t - self.ap_time_delta
+        if msg is not None and \
+           self.ap_boot_time is not None and \
+           hasattr(msg, 'time_boot_ms'):
+            return self.ap_boot_time + \
+                   rospy.Duration.from_sec(float(msg.time_boot_ms) / 1e03)
+        return rospy.Time.now()
 
     # Check whether sensor is present and healthy, based on last SYS_STATUS message
     def check_sensor_health(self, sensor_bits):
@@ -242,46 +221,68 @@ class MAVLinkBridge(object):
     #----------------------------------------------------------------------#
     ### Internals ###
 
-    # Process a SYSTEM_TIME message and return componentized seconds
-    def _process_system_time(self, msg):
-        # Cannot use if the message has a zero time in it
-        if msg.time_unix_usec == 0:
-            return None
+    # Perform initialization of MAVLink stream
+    # (necessary when first starting and possibly after rebooting AP)
+    def _init_stream(self):
+        # Wait for a heartbeat so we know the target system IDs
+        self.master.wait_heartbeat()
 
-        # Get local system time for calculations
-        local_time = time.time()
+        # Set up output stream from master
+        self.master.mav.request_data_stream_send(
+            self.master.target_system,
+            self.master.target_component,
+            mavutil.mavlink.MAV_DATA_STREAM_ALL,
+            self.mavlink_rate,
+            1)
 
-        # Calculate adjusted autopilot time, accounting for processing latencies
-        # NOTE: would like to determine transmission latency, but lack info
-        snd_rcv_time = float(msg.time_unix_usec) / 1e06 - msg._timestamp
-        adjusted_time = local_time + snd_rcv_time
-
-        # If tracking time delta, update the delta
-        # Using simplified numerical solution, but really local_time - adjusted_time
-        if self.track_time_delta:
-            self.ap_time_delta = rospy.Time.from_sec(0.0 - snd_rcv_time)
-
-        # Record the time at which the autopilot booted (when time_boot_ms == 0)
-        if self.ap_boot_time is None:
-            self.ap_boot_time = rospy.Time.from_sec(
-                                    float(msg.time_unix_usec) / 1e06 - \
-                                    float(msg.time_boot_ms) / 1e03)
-
-        return adjusted_time
-
-    # Set system clock based on SYSTEM_TIME message
-    # NOTE: May not return if usable SYSTEM_TIME message not seen
-    # NOTE: Requires ability to set date using 'date' command
-    def _sync_local_clock(self):
+    # Initialize local clock and time variables
+    # Can either sync with AP time or use the local clock; either way,
+    # want to know when AP booted so we can project other message times
+    # NOTE: We toyed with using locks to prevent time access during
+    # time initialization, but it doesn't seem helpful.
+    def _init_time(self, sync=False):
+        # Wait for a valid SYSTEM_TIME message
+        rospy.loginfo("Waiting for usable SYSTEM_TIME message ...")
         msg = None
-        while True:
+        while msg is None:
             msg = self.master.recv_match(type='SYSTEM_TIME', blocking=True)
-            if msg.time_unix_usec:
-                break
-        t = self._process_system_time(msg)
-        if t is None:
-            return False
-        return not bool(os.system("sudo date -s '@%f'" % t))
+            if not msg.time_boot_ms:  # MUST determine boot time
+                msg = None
+            if sync and not msg.time_unix_usec:  # If syncing, need GPS time
+                msg = None
+
+        # Decide whether to base time off autopilot or payload clock,
+        # in either case use a timestamp associated with msg
+        if sync:
+            ref_time = float(msg.time_unix_usec) / 1e06
+        else:
+            ref_time = msg._timestamp
+
+        # Record the real time when the AP booted (when time_boot_ms == 0)
+        self.ap_boot_time = rospy.Time.from_sec(
+                                ref_time - float(msg.time_boot_ms) / 1e03)
+
+        # If not updating the local clock, then we're done
+        if not sync:
+            rospy.logwarn("Warning: local clock may differ from AP clock.")
+            return
+
+        # Sync local clock to AP time, fast-forwarded by processing delay
+        # NOTE: If we knew the serial latency, we'd account for that here
+        ap_time = float(msg.time_unix_usec) / 1e06 + time.time() - msg._timestamp
+        if bool(os.system("sudo date -s '@%f'" % t)):
+            rospy.logwarn("Failed to sync local clock!")
+        else:
+            rospy.loginfo("Successfully synced local clock.")
+
+    # Handle special STATUSTEXT messages
+    def _handle_statustext(self, msg):
+        # Log all messages
+        rospy.loginfo("MAVLink STATUSTEXT: %s" % msg.text)
+
+        # Autopilot rebooted, need to re-init time
+        if 'Ready to FLY.' in msg.text:
+            self._init_time()
 
     # Handle a received MAVLink message
     def _handle_msg(self, msg):
@@ -290,10 +291,8 @@ class MAVLinkBridge(object):
         # Handle special cases
         if msg_type == "BAD_DATA":
             return  # Ignore "bad data"
-        elif msg_type == "SYSTEM_TIME":
-            self._process_system_time(msg)
         elif msg_type == "STATUSTEXT":
-            rospy.loginfo("MAVLink STATUSTEXT: %s" % msg.text)
+            self._handle_statustext(msg)
 
         # If you *really* want to see what's coming out of mavlink
         if self.spam_mavlink:

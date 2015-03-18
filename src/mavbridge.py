@@ -162,9 +162,6 @@ if __name__ == '__main__':
     parser.add_argument("--gps-time-hack", dest="gps_time_hack", 
                         action="store_true", default=False,
                         help="try to set system clock from autopilot time")
-    parser.add_argument("--track-time-delta", dest="track_time_delta", 
-                        action="store_true", default=False,
-                        help="track AP time, use to project current time")
     parser.add_argument("--serial-relief", default=0, type=int, dest="serial_relief",
                         help="limit serial backlog to N bytes (0=disabled)")
     parser.add_argument("--spam-mavlink", dest="spam_mavlink", 
@@ -206,7 +203,6 @@ if __name__ == '__main__':
                                basename=args.basename,
                                loop_rate=args.looprate,
                                sync_local_clock=args.gps_time_hack,
-                               track_time_delta=args.track_time_delta,
                                serial_relief=args.serial_relief,
                                spam_mavlink=args.spam_mavlink)
     except Exception as ex:

@@ -92,7 +92,6 @@ Some additional options:
 * `--ros-basename BASENAME` - Use a ROS basename other than "autopilot"
 * `--looprate HZ` - Run the internal message-handling loop at `HZ` Hz (default 50)
 * `--gps-time-hack` - Attempt to set the system clock from the autopilot. Requires root privileges
-* `--track-time-delta` - Maintain a "delta" between the local and autopilot clocks (used by some pubs)
 * `--serial-relief SIZE` - Don't get serial backlog grow past `SIZE` bytes
 * `--spam-mavlink` - Print every _received_ MAVLink message in semi-friendly form to stdout.
 
