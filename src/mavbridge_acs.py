@@ -277,6 +277,11 @@ def sub_payload_waypoint(message, bridge):
         0, 0, 0, 0, 0,
         message.lat, message.lon, message.alt)
 
+# Purpose: reboot the autopilot
+# NOTE: core should realize the autopilot rebooted and fix timing
+def sub_reboot(message, bridge):
+    bridge.master.reboot_autopilot()
+
 #-----------------------------------------------------------------------
 # init()
 
@@ -293,4 +298,5 @@ def init(bridge):
     bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)
     bridge.add_ros_sub_event("land_abort", stdmsg.UInt16, sub_landing_abort)
     bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA, sub_payload_waypoint, log=False) 
+    bridge.add_ros_sub_event("reboot", stdmsg.Empty, sub_reboot)
     return True
