@@ -1,0 +1,24 @@
+float32 timeout
+---
+bool ok
+bool cap_mission_float
+bool cap_param_float
+bool cap_mission_int
+bool cap_command_int
+bool cap_param_union
+bool cap_ftp
+bool cap_set_attitude
+bool cap_set_position_local
+bool cap_set_position_global
+bool cap_terrain
+bool cap_set_actuator
+uint32 flight_sw
+uint32 middleware
+uint32 os_sw
+uint32 board
+string flight_custom
+string middleware_custom
+string os_custom
+uint16 vendor_id
+uint16 product_id
+uint64 uid

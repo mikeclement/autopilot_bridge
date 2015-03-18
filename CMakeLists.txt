@@ -35,6 +35,7 @@ add_service_files(
   RallySetAll.srv
   SlaveSetup.srv
   TimedAction.srv
+  Version.srv
   WPGetAll.srv
   WPGetRange.srv
   WPSetAll.srv

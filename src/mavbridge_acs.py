@@ -37,8 +37,13 @@ mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
 
 def mav_statustext(msg_type, msg, bridge):
     # Sets the flag for calibration service (see below)
+    if str(msg.text) == "Calibrating barometer":
+        srv_calpress.started = True
     if str(msg.text) == "zero airspeed calibrated":
         srv_calpress.done = True
+
+def mav_autopilot_version(msg_type, msg, bridge):
+    srv_version.msg = msg
 
 def pub_pose_att_vel(msg_type, msg, bridge):
     pub = bridge.get_ros_pub("acs_pose", apmsg.Geodometry, queue_size=1)
@@ -117,20 +122,90 @@ def srv_calpress(req, bridge):
     if req.timeout <= 0:
         return { 'ok' : False }
 
-    # Reset attribute and command AP to calibrate
+    # Reset attributes
+    srv_calpress.started = False
     srv_calpress.done = False
-    bridge.master.calibrate_pressure()
 
     # Cycle, waiting for flag to be raised (see mavlink handler above)
     end_time = time.time() + req.timeout
     while time.time() < end_time:
+        if not srv_calpress.started:
+            # Retry as needed
+            bridge.master.calibrate_pressure()
+        time.sleep(0.2)  # NOTE: may round to next 0.2s increment
         if srv_calpress.done:
             return { 'ok' : True }
-        time.sleep(0.5)  # NOTE: may round to next 0.5s increment
     return { 'ok' : False }
 
-# Initialize attribute
+# Initialize attributes
+srv_calpress.started = False
 srv_calpress.done = False
+
+def srv_version(req, bridge):
+    # User must supply a positive timeout in seconds
+    if req.timeout <= 0:
+        return { 'ok' : False }
+
+    # Init/reset variables
+    srv_version.msg = None
+    rsp = apsrv.VersionResponse()
+    rsp.ok = False
+
+    # Cycle, waiting for flag to be raised (see mavlink handler above)
+    end_time = time.time() + req.timeout
+    while time.time() < end_time:
+        # (re)send request each cycle
+        bridge.master.mav.autopilot_version_request_send(
+            mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
+            mavutil.mavlink.MAV_TYPE_GENERIC)
+        time.sleep(0.2)  # NOTE: may round to next 0.2s increment
+        if srv_version.msg is not None:
+            print str(srv_version.msg)
+            # Shorter variable names for less typing
+            msg = srv_version.msg
+            mav = mavutil.mavlink
+
+            rsp.ok = True
+
+            rsp.cap_mission_float = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_MISSION_FLOAT
+            rsp.cap_param_float = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_PARAM_FLOAT
+            rsp.cap_mission_int = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_MISSION_INT
+            rsp.cap_command_int = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_COMMAND_INT
+            rsp.cap_param_union = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_PARAM_UNION
+            rsp.cap_ftp = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_FTP
+            rsp.cap_set_attitude = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_SET_ATTITUDE_TARGET
+            rsp.cap_set_position_local = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_LOCAL_NED
+            rsp.cap_set_position_global = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_GLOBAL_INT
+            rsp.cap_terrain = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_TERRAIN
+            rsp.cap_set_actuator = msg.capabilities & \
+                mav.MAV_PROTOCOL_CAPABILITY_SET_ACTUATOR_TARGET
+
+            rsp.flight_sw = msg.flight_sw_version
+            rsp.middleware = msg.middleware_sw_version
+            rsp.os_sw = msg.os_sw_version
+            rsp.board = msg.board_version
+            rsp.flight_custom = ''.join(map(lambda x: chr(x),
+                                            msg.flight_custom_version))
+            rsp.middleware_custom = ''.join(map(lambda x: chr(x),
+                                                msg.middleware_custom_version))
+            rsp.os_custom = ''.join(map(lambda x: chr(x),
+                                        msg.os_custom_version))
+            rsp.vendor_id = msg.vendor_id
+            rsp.product_id = msg.product_id
+            rsp.uid = msg.uid
+
+            break
+    return rsp
 
 #-----------------------------------------------------------------------
 # ROS subscriber handlers
@@ -207,9 +282,11 @@ def sub_payload_waypoint(message, bridge):
 
 def init(bridge):
     bridge.add_mavlink_event("STATUSTEXT", mav_statustext)
+    bridge.add_mavlink_event("AUTOPILOT_VERSION", mav_autopilot_version)
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
     bridge.add_mavlink_event("GLOBAL_POS_ATT_NED", pub_pose_att_vel)
     bridge.add_ros_srv_event("calpress", apsrv.TimedAction, srv_calpress)
+    bridge.add_ros_srv_event("version", apsrv.Version, srv_version)
     bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard, log=False)
     bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground, log=False)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
