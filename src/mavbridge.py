@@ -186,10 +186,13 @@ if __name__ == '__main__':
         else:
             print "Error: could not find a suitable device.\n"
             sys.exit(-1)
-    elif args.device.find(':') == -1 and not os.path.exists(args.device):
-        # ':' check allows for specifying network sockets
-        print "Specified device doesn't exist.\n"
-        sys.exit(-1)
+    elif args.device.find(':') == -1:
+        if ',' in args.device:
+            args.device, args.baudrate = args.device.split(',')
+        if not os.path.exists(args.device):
+            # ':' check allows for specifying network sockets
+            print "Specified device doesn't exist.\n"
+            sys.exit(-1)
 
     # User-friendly hello message
     print "Starting MAVLink <-> ROS interface over the following link:\n" + \
