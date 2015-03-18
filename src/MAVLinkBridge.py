@@ -292,6 +292,8 @@ class MAVLinkBridge(object):
             return  # Ignore "bad data"
         elif msg_type == "SYSTEM_TIME":
             self._process_system_time(msg)
+        elif msg_type == "STATUSTEXT":
+            rospy.loginfo("MAVLink STATUSTEXT: %s" % msg.text)
 
         # If you *really* want to see what's coming out of mavlink
         if self.spam_mavlink:
