@@ -6,10 +6,6 @@
 #
 # Originally developed by Mike Clement, 2015
 #
-# NOTE: This replaces, or acts in place of, the 'param' module; for now,
-# the 'param' module is still usable, but should *not* be loaded at the
-# same time as this module!
-#
 # This software may be freely used, modified, and distributed.
 # This software comes with no warranty.
 
@@ -267,10 +263,10 @@ def init(bridge):
     bridge.add_mavlink_event("PARAM_VALUE", obj.mav_param_value)
     bridge.add_mavlink_event("FENCE_POINT", obj.mav_fence_point)
     bridge.add_mavlink_event("RALLY_POINT", obj.mav_rally_point)
-    bridge.add_ros_srv_event("param_get", apsrv.ParamGet, obj.srv_param_get)
-    bridge.add_ros_srv_event("param_set", apsrv.ParamSet, obj.srv_param_set)
-    bridge.add_ros_srv_event("fence_getall", apsrv.FenceGetAll, obj.srv_fence_getall)
-    bridge.add_ros_srv_event("fence_setall", apsrv.FenceSetAll, obj.srv_fence_setall)
-    bridge.add_ros_srv_event("rally_getall", apsrv.RallyGetAll, obj.srv_rally_getall)
-    bridge.add_ros_srv_event("rally_setall", apsrv.RallySetAll, obj.srv_rally_setall)
+    bridge.add_ros_srv_event("fpr_param_get", apsrv.ParamGet, obj.srv_param_get)
+    bridge.add_ros_srv_event("fpr_param_set", apsrv.ParamSet, obj.srv_param_set)
+    bridge.add_ros_srv_event("fpr_fence_getall", apsrv.FenceGetAll, obj.srv_fence_getall)
+    bridge.add_ros_srv_event("fpr_fence_setall", apsrv.FenceSetAll, obj.srv_fence_setall)
+    bridge.add_ros_srv_event("fpr_rally_getall", apsrv.RallyGetAll, obj.srv_rally_getall)
+    bridge.add_ros_srv_event("fpr_rally_setall", apsrv.RallySetAll, obj.srv_rally_setall)
     return obj
