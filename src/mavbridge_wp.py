@@ -157,7 +157,7 @@ class mavbridge_wp(object):
     def _wp_get(self, bridge, low=0, high=-1, last_only=False):
         # Make sure another service request isn't active
         if self.fetch_in_progress or self.push_in_progress:
-            return { 'ok' : False, 'wp' : [] }
+            return { 'ok' : False, 'points' : [] }
 
         # Clear the old list
         self._clr()
@@ -178,7 +178,7 @@ class mavbridge_wp(object):
 
         if self.fetch_in_progress:
             self.fetch_in_progress = False
-            return { 'ok' : False, 'wp' : [] }
+            return { 'ok' : False, 'points' : [] }
         else:
             wplist = []
             for i in range(self.fetch_highest+1):
@@ -200,7 +200,7 @@ class mavbridge_wp(object):
                 wp_msg.y = y
                 wp_msg.z = z
                 wplist.append(wp_msg)
-            return { 'ok' : True, 'wp' : wplist }
+            return { 'ok' : True, 'points' : wplist }
 
     # Handle incoming ROS service requests to get all waypoints
     def srv_wp_getall(self, req, bridge):
@@ -221,12 +221,12 @@ class mavbridge_wp(object):
         # Make sure another service request isn't active
         #  and that there's at least one waypoint to push
         if self.fetch_in_progress or self.push_in_progress \
-                                  or len(req.wp) == 0:
+                                  or len(req.points) == 0:
             return { 'ok' : False }
 
         # Load waypoints into list
         self._clr()
-        for w in req.wp:
+        for w in req.points:
             self._set(w.seq, (w.frame, w.command, w.current, w.autocontinue,
                               w.param1, w.param2, w.param3, w.param4,
                               w.x, w.y, w.z))
