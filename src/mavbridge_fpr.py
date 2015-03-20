@@ -74,7 +74,7 @@ class mavbridge_fpr(object):
             pn = str(name).upper()
             pv = float(value)
             s = lambda : self._master.param_set_send(pn, pv)
-            f = lambda : self._get_param(pn, tries=1, force=False)
+            f = lambda : self._get_param(pn, tries=2, force=False)
             c = lambda v: bool(abs(v - pv) < 0.00003)
             if pn in self._params: del self._params[pn]
             return self._set_item(s, f, c, tries=tries)
@@ -93,7 +93,7 @@ class mavbridge_fpr(object):
         '''set a fence point'''
         with self._fence_lock:
             s = lambda : self._master.mav.send(p)
-            f = lambda : self._get_fence_point(p.idx)
+            f = lambda : self._get_fence_point(p.idx, tries=2, force=False)
             # Check condition taken from MAVProxy's fence module
             c = lambda v: bool(abs(v.lat - p.lat) < 0.00003 and 
                                abs(v.lng - p.lng) < 0.00003)
@@ -114,7 +114,7 @@ class mavbridge_fpr(object):
         '''set a rally point'''
         with self._rally_lock:
             s = lambda : self._master.mav.send(p)
-            f = lambda : self._get_rally_point(p.idx)
+            f = lambda : self._get_rally_point(p.idx, tries=2, force=False)
             # Check condition taken from MAVProxy's fence module
             c = lambda v: bool(abs(v.lat - p.lat) < 0.00003 and 
                                abs(v.lng - p.lng) < 0.00003 and
@@ -184,10 +184,54 @@ class mavbridge_fpr(object):
             return { 'ok' : False, 'value' : 0.0 }
         return { 'ok' : True, 'value' : val }
 
+    def srv_param_getlist(self, req, bridge):
+        '''service to get *large* lists of parameters'''
+        # Since we're doing several interdependent ops, get the lock up front
+        with self._param_lock:
+            values = []
+            # Take advantage of fetch-all and caching
+            # NOTE: If list is small, one-by-one fetching might be better
+            self._params = {}
+            self._master.param_fetch_all()
+            # Wait a moment for some data to come in
+            time.sleep(2.0)
+            for p in req.name:
+                pn = str(p.name).upper()
+                pv = self._get_param(pn, force=False)  # NOTE: Using cache
+                if isinstance(pv, float):
+                    values.append(apmsg.ParamPair(pn, pv))
+            return { 'param' : values }
+
     def srv_param_set(self, req, bridge):
         '''service to set a parameter'''
         res = self._set_param(req.name, req.value)
         return { 'ok' : res }
+
+    def srv_param_setlist(self, req, bridge):
+        '''service to set *large* lists of parameters'''
+        # Since we're doing several interdependent ops, get the lock up front
+        with self._param_lock:
+            # Take advantage of fetch-all and caching
+            # NOTE: If list is small, one-by-one fetching might be better
+            self._params = {}
+            self._master.param_fetch_all()
+            # Wait a moment for some data to come in
+            time.sleep(2.0)
+            for p in req.param:
+                pn = str(p.name).upper()
+                pv = float(p.value)
+                # First check if param is already correctly set
+                auto_pv = self._get_param(pn, force=False)  # NOTE: Using cache
+                if auto_pv is None:
+                    return { 'ok' : False }
+                if abs(pv - auto_pv) < 0.00003:
+                    continue
+                # If not, set it correctly
+                res = self._set_param(pn, pv)
+                if not res:
+                    return { 'ok' : False }
+                rospy.loginfo("PARAM %s --> %0.06f" % (pn, pv))
+            return { 'ok' : True }
 
     def srv_fence_getall(self, req, bridge):
         '''service to get list of fence points'''
@@ -264,7 +308,9 @@ def init(bridge):
     bridge.add_mavlink_event("FENCE_POINT", obj.mav_fence_point)
     bridge.add_mavlink_event("RALLY_POINT", obj.mav_rally_point)
     bridge.add_ros_srv_event("fpr_param_get", apsrv.ParamGet, obj.srv_param_get)
+    bridge.add_ros_srv_event("fpr_param_getlist", apsrv.ParamGetList, obj.srv_param_getlist)
     bridge.add_ros_srv_event("fpr_param_set", apsrv.ParamSet, obj.srv_param_set)
+    bridge.add_ros_srv_event("fpr_param_setlist", apsrv.ParamSetList, obj.srv_param_setlist)
     bridge.add_ros_srv_event("fpr_fence_getall", apsrv.FenceGetAll, obj.srv_fence_getall)
     bridge.add_ros_srv_event("fpr_fence_setall", apsrv.FenceSetAll, obj.srv_fence_setall)
     bridge.add_ros_srv_event("fpr_rally_getall", apsrv.RallyGetAll, obj.srv_rally_getall)
