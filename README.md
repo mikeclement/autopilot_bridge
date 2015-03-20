@@ -141,21 +141,23 @@ The 'param' module provides the following additional ROS elements:
   * `autopilot/param_getlist` - Get a set of parameters by name (array)
   * `autopilot/param_set` - Set a parameter by name and value (string, float)
 
-Note that this module provides a more complete implementation of parameter
-fetching than the lighter-weight 'fpr' module described below.
+**Note**: this module predates the 'fpr' module. It attempts to provide a more
+complete implementation of the parameter fetching protocol; however, you may
+alternatively use the newer `fpr_param_*` services described below.
 
 ### fpr - Fences, Parameters, and Rally points
 
 The 'fpr' module provides a common framework for getting and setting parameters,
 lists of fence points, and lists of rally points. It can be used in place of the
-'param' module for individual gets and sets. It provides the following additional
-ROS elements:
+'param' module. It provides the following additional ROS elements:
 
 * Services
  * `autopilot/fpr_fence_getall` - Get all fence points in the autopilot
  * `autopilot/fpr_fence_setall` - Clear and set all fence points in the autopilot
  * `autopilot/fpr_param_get` - Get a specific parameter by name
+ * `autopilot/fpr_param_getlist` - Get a list of parameters by name
  * `autopilot/fpr_param_set` - Set a parameter by name and value (string, float)
+ * `autopilot/fpr_param_setlist` - Set a list of parameters by name and value
  * `autopilot/fpr_rally_getall` - Get all rally points in the autopilot
  * `autopilot/fpr_rally_setall` - Clear and set all rally points in the autopilot
 
