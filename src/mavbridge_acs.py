@@ -132,7 +132,7 @@ def srv_calpress(req, bridge):
         if not srv_calpress.started:
             # Retry as needed
             bridge.master.calibrate_pressure()
-        time.sleep(0.2)  # NOTE: may round to next 0.2s increment
+        time.sleep(0.5)  # NOTE: may round to next increment
         if srv_calpress.done:
             return { 'ok' : True }
     return { 'ok' : False }
