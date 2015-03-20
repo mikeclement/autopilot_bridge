@@ -150,7 +150,7 @@ class mavbridge_param(object):
 
         # If the newly-fetched parameter matches in value, we're good
         new = self._get(str(req.name))
-        return new is not None and new == req.value
+        return new is not None and abs(new - req.value) < 0.00003
 
 
 #-----------------------------------------------------------------------
