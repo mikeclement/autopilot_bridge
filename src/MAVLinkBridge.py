@@ -269,8 +269,9 @@ class MAVLinkBridge(object):
 
         # Sync local clock to AP time, fast-forwarded by processing delay
         # NOTE: If we knew the serial latency, we'd account for that here
-        ap_time = float(msg.time_unix_usec) / 1e06 + time.time() - msg._timestamp
-        if bool(os.system("sudo date -s '@%f'" % t)):
+        ap_time = float(msg.time_unix_usec) / 1e06 + time.time() - \
+                  msg._timestamp
+        if bool(os.system("sudo date -s '@%f'" % ap_time)):
             rospy.logwarn("Failed to sync local clock!")
         else:
             rospy.loginfo("Successfully synced local clock.")
