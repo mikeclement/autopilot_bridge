@@ -31,6 +31,7 @@ add_service_files(
   ParamGet.srv
   ParamGetList.srv
   ParamSet.srv
+  ParamSetList.srv
   RallyGetAll.srv
   RallySetAll.srv
   SlaveSetup.srv
