@@ -244,10 +244,10 @@ if __name__ == '__main__':
     # Start loop (this won't return until we terminate or ROS shuts down)
     print "Starting autopilot bridge loop...\n"
     while True:
+        # TODO: restart within run_loop() should obviate this loop
         try:
             bridge.run_loop()
             break  # If loop legitimately returned, we'll exit
-        except Exception as ex:
-            print "MAVLinkBridge Loop Error: " + str(ex.args[0])
-            print "...restarting loop..."
+        except:
+            print "... unhandled MAVLinkBridge error, restarting loop ..."
 

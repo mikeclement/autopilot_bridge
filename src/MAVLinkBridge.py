@@ -216,7 +216,11 @@ class MAVLinkBridge(object):
     # Start main loop
     # NOTE: This won't return until ROS is terminated
     def run_loop(self):
-        self._mainloop()
+        while True:
+            try:
+                self._mainloop()
+            except Exception as ex:
+                rospy.logwarn("MAVLinkBridge loop restart: " + str(ex.args[0]))
 
     #----------------------------------------------------------------------#
     ### Internals ###
