@@ -128,7 +128,7 @@ The 'wp' module provides the following additional ROS elements:
 
 * Services
   * `autopilot/wp_getall` - Get all waypoints in the autopilot
-  * `autopilot/wp_getlast` - Get a range of waypoints, by numeric index
+  * `autopilot/wp_getrange` - Get a range of waypoints, by numeric index
   * `autopilot/wp_getlast` - Get the highest-indexed waypoint
   * `autopilot/wp_setall` - Clear and set all waypoints in the autopilot
 
