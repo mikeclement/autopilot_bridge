@@ -216,7 +216,7 @@ class MAVLinkBridge(object):
     # Start main loop
     # NOTE: This won't return until ROS is terminated
     def run_loop(self):
-        while True:
+        while not rospy.is_shutdown():
             try:
                 self._mainloop()
             except Exception as ex:
