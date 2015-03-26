@@ -223,12 +223,15 @@ class mavbridge_fpr(object):
                 # First check if param is already correctly set
                 auto_pv = self._get_param(pn, force=False)  # NOTE: Using cache
                 if auto_pv is None:
-                    return { 'ok' : False }
+                    # NOTE: Permissive of skipping unknown params
+                    rospy.logwarn("PARAM %s doesn't exist" % pn)
+                    continue
                 if abs(pv - auto_pv) < 0.00003:
                     continue
                 # If not, set it correctly
                 res = self._set_param(pn, pv)
                 if not res:
+                    rospy.logwarn("PARAM %s couldn't be set" % pn)
                     return { 'ok' : False }
                 rospy.loginfo("PARAM %s --> %0.06f" % (pn, pv))
             return { 'ok' : True }
