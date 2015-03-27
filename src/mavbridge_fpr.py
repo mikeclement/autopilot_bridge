@@ -196,7 +196,7 @@ class mavbridge_fpr(object):
             # Wait a moment for some data to come in
             time.sleep(2.0)
             for p in req.name:
-                pn = str(p.name).upper()
+                pn = str(p).upper()
                 pv = self._get_param(pn, force=False)  # NOTE: Using cache
                 if isinstance(pv, float):
                     values.append(apmsg.ParamPair(pn, pv))
