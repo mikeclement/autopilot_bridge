@@ -157,7 +157,7 @@ class mavbridge_param(object):
 # init()
 
 def init(bridge):
-    p_obj = mavbridge_param(bridge.master)
+    p_obj = mavbridge_param(bridge.get_master())
     bridge.add_mavlink_event("PARAM_VALUE", p_obj.mav_param_value)
     bridge.add_ros_srv_event("param_get", apsrv.ParamGet, p_obj.srv_param_get)
     bridge.add_ros_srv_event("param_getlist", apsrv.ParamGetList,

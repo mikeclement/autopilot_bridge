@@ -88,30 +88,31 @@ def pub_pose_att_vel(msg_type, msg, bridge):
 
 # Publish a status message with many fields
 def pub_status(msg_type, msg, bridge):
+    master = bridge.get_master()
     pub = bridge.get_ros_pub("status", apmsg.Status, queue_size=1)
     sta = apmsg.Status()
     sta.header.stamp = bridge.project_ap_time()
-    if bridge.master.flightmode in mode_mav_to_enum:
-        sta.mode = mode_mav_to_enum[bridge.master.flightmode]
+    if master.flightmode in mode_mav_to_enum:
+        sta.mode = mode_mav_to_enum[master.flightmode]
     else:
         sta.mode = apmsg.Status.MODE_UNKNOWN
     sta.armed = msg.base_mode & mavutil.mavlink.MAV_MODE_FLAG_SAFETY_ARMED
     sta.ahrs_ok = bridge.check_sensor_health(mavutil.mavlink.MAV_SYS_STATUS_AHRS)
-    sta.alt_rel = bridge.master.field('GLOBAL_POSITION_INT', 'relative_alt', 0)
+    sta.alt_rel = master.field('GLOBAL_POSITION_INT', 'relative_alt', 0)
     sta.as_ok = bridge.check_sensor_health(mavutil.mavlink.MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE)
-    sta.as_read = bridge.master.field('VFR_HUD', 'airspeed', 0)
-    sta.gps_ok = (bridge.master.field('GPS_RAW_INT', 'fix_type', 0) == 3)
-    sta.gps_sats = bridge.master.field('GPS_RAW_INT', 'satellites_visible', 0)
-    sta.gps_eph = bridge.master.field('GPS_RAW_INT', 'eph', 0)
+    sta.as_read = master.field('VFR_HUD', 'airspeed', 0)
+    sta.gps_ok = (master.field('GPS_RAW_INT', 'fix_type', 0) == 3)
+    sta.gps_sats = master.field('GPS_RAW_INT', 'satellites_visible', 0)
+    sta.gps_eph = master.field('GPS_RAW_INT', 'eph', 0)
     sta.ins_ok = bridge.check_sensor_health(mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_ACCEL | \
                                             mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_GYRO)
     sta.mag_ok = bridge.check_sensor_health(mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_MAG)
-    sta.mis_cur = bridge.master.field('MISSION_CURRENT', 'seq', 0)
-    sta.pwr_ok = not (bridge.master.field('POWER_STATUS', 'flags', 0) \
+    sta.mis_cur = master.field('MISSION_CURRENT', 'seq', 0)
+    sta.pwr_ok = not (master.field('POWER_STATUS', 'flags', 0) \
                     & mavutil.mavlink.MAV_POWER_STATUS_CHANGED)
-    sta.pwr_batt_rem = bridge.master.field('SYS_STATUS', 'battery_remaining', -1)
-    sta.pwr_batt_vcc = bridge.master.field('SYS_STATUS', 'voltage_battery', -1)
-    sta.pwr_batt_cur = bridge.master.field('SYS_STATUS', 'current_battery', -1)
+    sta.pwr_batt_rem = master.field('SYS_STATUS', 'battery_remaining', -1)
+    sta.pwr_batt_vcc = master.field('SYS_STATUS', 'voltage_battery', -1)
+    sta.pwr_batt_cur = master.field('SYS_STATUS', 'current_battery', -1)
     pub.publish(sta)
 
 #-----------------------------------------------------------------------
@@ -131,7 +132,7 @@ def srv_calpress(req, bridge):
     while time.time() < end_time:
         if not srv_calpress.started:
             # Retry as needed
-            bridge.master.calibrate_pressure()
+            bridge.get_master().calibrate_pressure()
         time.sleep(0.5)  # NOTE: may round to next increment
         if srv_calpress.done:
             return { 'ok' : True }
@@ -155,7 +156,7 @@ def srv_version(req, bridge):
     end_time = time.time() + req.timeout
     while time.time() < end_time:
         # (re)send request each cycle
-        bridge.master.mav.autopilot_version_request_send(
+        bridge.get_master().mav.autopilot_version_request_send(
             mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
             mavutil.mavlink.MAV_TYPE_GENERIC)
         time.sleep(0.2)  # NOTE: may round to next 0.2s increment
@@ -214,7 +215,7 @@ def srv_version(req, bridge):
 # NOTE: Not yet supported in MAVLink master branch
 # Fields: None
 def sub_heartbeat_onboard(message, bridge):
-    bridge.master.mav.heartbeat_send(
+    bridge.get_master().mav.heartbeat_send(
         mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
         mavutil.mavlink.MAV_TYPE_GENERIC,
         0, 0,
@@ -223,7 +224,7 @@ def sub_heartbeat_onboard(message, bridge):
 # Purpose: Ground-to-air heartbeat, indicates link from GCS
 def sub_heartbeat_ground(message, bridge):
     # TODO check for timeliness
-    bridge.master.mav.heartbeat_send(
+    bridge.get_master().mav.heartbeat_send(
         mavutil.mavlink.MAV_TYPE_GCS,
         mavutil.mavlink.MAV_TYPE_GENERIC,
         0, 0, 0)
@@ -233,10 +234,10 @@ def sub_heartbeat_ground(message, bridge):
 # Fields:
 # .data - index from mode_mav_to_enum
 def sub_change_mode(message, bridge):
-    mav_map = bridge.master.mode_mapping()
+    mav_map = bridge.get_master().mode_mapping()
     if message.data in mode_enum_to_mav and \
         mode_enum_to_mav[message.data] in mav_map:
-        bridge.master.set_mode(mav_map[mode_enum_to_mav[message.data]])
+        bridge.get_master().set_mode(mav_map[mode_enum_to_mav[message.data]])
     else:
         raise Exception("invalid mode %u" % message.data)
 
@@ -244,9 +245,9 @@ def sub_change_mode(message, bridge):
 # NOTE: Not yet supported in MAVLink master branch
 # Fields: None
 def sub_landing(message, bridge):
-    bridge.master.mav.command_long_send(
-        bridge.master.target_system,
-        bridge.master.target_component,
+    bridge.get_master().mav.command_long_send(
+        bridge.get_master().target_system,
+        bridge.get_master().target_component,
         mavutil.mavlink.MAV_CMD_DO_RALLY_LAND,
         0, 0, 0, 0, 0, 0, 0, 0)
 
@@ -256,9 +257,9 @@ def sub_landing(message, bridge):
 # .data - Altitude to return to (meters, integer)
 def sub_landing_abort(message, bridge):
     # TODO: Do we need to repeat until we see RTL again??
-    bridge.master.mav.command_long_send(
-        bridge.master.target_system,
-        bridge.master.target_component,
+    bridge.get_master().mav.command_long_send(
+        bridge.get_master().target_system,
+        bridge.get_master().target_component,
         mavutil.mavlink.MAV_CMD_DO_GO_AROUND,
         0,
         message.data, # TODO better to use parameter
@@ -270,9 +271,9 @@ def sub_landing_abort(message, bridge):
 # .lon - Decimal degrees
 # .alt - Decimal meters **AGL wrt home**
 def sub_payload_waypoint(message, bridge):
-    bridge.master.mav.command_long_send(
-        bridge.master.target_system,
-        bridge.master.target_component,
+    bridge.get_master().mav.command_long_send(
+        bridge.get_master().target_system,
+        bridge.get_master().target_component,
         mavutil.mavlink.MAV_CMD_OVERRIDE_GOTO,
         0, 0, 0, 0, 0,
         message.lat, message.lon, message.alt)
@@ -280,7 +281,7 @@ def sub_payload_waypoint(message, bridge):
 # Purpose: reboot the autopilot
 # NOTE: core should realize the autopilot rebooted and fix timing
 def sub_reboot(message, bridge):
-    bridge.master.reboot_autopilot()
+    bridge.get_master().reboot_autopilot()
 
 #-----------------------------------------------------------------------
 # init()

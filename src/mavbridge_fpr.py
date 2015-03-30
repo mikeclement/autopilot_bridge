@@ -306,7 +306,7 @@ class mavbridge_fpr(object):
 # init()
 
 def init(bridge):
-    obj = mavbridge_fpr(bridge.master)
+    obj = mavbridge_fpr(bridge.get_master())
     bridge.add_mavlink_event("PARAM_VALUE", obj.mav_param_value)
     bridge.add_mavlink_event("FENCE_POINT", obj.mav_fence_point)
     bridge.add_mavlink_event("RALLY_POINT", obj.mav_rally_point)

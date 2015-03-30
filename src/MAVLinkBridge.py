@@ -48,7 +48,7 @@ class MLBTimedEvent(object):
 
 class MAVLinkBridge(object):
 
-    ### Initialization ###
+    ### Initialization and Module Loading ###
 
     def __init__(self, device, baudrate,
                  basename='autopilot',     # ROS topic basename
@@ -59,21 +59,22 @@ class MAVLinkBridge(object):
                  spam_mavlink=False):      # Print ALL MAVLink messages
 
         # Settings that get used later
-        self.basename = basename
-        self.spam_mavlink = spam_mavlink
-        self.loop_rate = loop_rate
-        self.serial_relief = serial_relief
-        self.mavlink_rate = mavlink_rate
+        self._basename = basename
+        self._spam_mavlink = spam_mavlink
+        self._loop_rate = loop_rate
+        self._serial_relief = serial_relief
+        self._mavlink_rate = mavlink_rate
 
         # Internal variables
-        self.master = None
-        self.mav_events = {}
-        self.mav_events_all = []
-        self.ros_sub_events = {}
-        self.ros_srv_events = {}
-        self.ros_pubs = {}
-        self.timed_events = []
-        self.ap_boot_time = None
+        self._master = None
+        self._modules = {}
+        self._mav_events = {}
+        self._mav_events_all = []
+        self._ros_sub_events = {}
+        self._ros_srv_events = {}
+        self._ros_pubs = {}
+        self._timed_events = []
+        self._ap_boot_time = None
 
         # Initialize ROS node
         try:
@@ -84,7 +85,7 @@ class MAVLinkBridge(object):
         # Initialize mavlink connection
         try:
             # Open connection
-            self.master = mavutil.mavlink_connection(
+            self._master = mavutil.mavlink_connection(
                 device,
                 int(baudrate),
                 autoreconnect=True)
@@ -94,7 +95,25 @@ class MAVLinkBridge(object):
         except Exception as ex:
             raise Exception("MAVLink init error: " + str(ex.args[0]))
 
+    # Add in handlers from a module file
+    # NOTE: Must be an object, perhaps loaded using __import__() / reload()
+    def add_module(self, mod_name, mod_obj):
+        if mod_name in self._modules:
+            return
+        self._modules[mod_name] = mod_obj.init(self)
+
     ### Useful functions for modular handlers ###
+
+    # Provide access to underlying MAVLink connection
+    def get_master(self):
+        return self._master
+
+    # Provide access to loaded module objects
+    # NOTE: Most useful if module's init() returns an object instance
+    def get_module(self, m_name):
+        if m_name in self._modules:
+            return self._modules[m_name]
+        return None
 
     # Return projected current time of AP (UTC) as rospy.Time object
     # If a MAVLink message object with the 'time_boot_ms' attribute is given,
@@ -102,17 +121,17 @@ class MAVLinkBridge(object):
     # Otherwise, use current system time as the basis.
     def project_ap_time(self, msg=None):
         if msg is not None and \
-           self.ap_boot_time is not None and \
+           self._ap_boot_time is not None and \
            hasattr(msg, 'time_boot_ms'):
-            return self.ap_boot_time + \
+            return self._ap_boot_time + \
                    rospy.Duration.from_sec(float(msg.time_boot_ms) / 1e03)
         return rospy.Time.now()
 
     # Check whether sensor is present and healthy, based on last SYS_STATUS message
     def check_sensor_health(self, sensor_bits):
-        present = self.master.field('SYS_STATUS', 'onboard_control_sensors_enabled', 0)
+        present = self._master.field('SYS_STATUS', 'onboard_control_sensors_enabled', 0)
         present = ((present & sensor_bits) == sensor_bits)
-        healthy = self.master.field('SYS_STATUS', 'onboard_control_sensors_health', 0)
+        healthy = self._master.field('SYS_STATUS', 'onboard_control_sensors_health', 0)
         healthy = ((healthy & sensor_bits) == sensor_bits)
         return (present and healthy)
 
@@ -122,16 +141,16 @@ class MAVLinkBridge(object):
     # NOTE: Can pass optional args to rospy.Publisher() in **pub_args;
     #  of course, all users of the publisher will be subject to same options
     def get_ros_pub(self, topic, topic_type, **pub_args):
-        if topic in self.ros_pubs:
-            (t_type, t_pub) = self.ros_pubs[topic]
+        if topic in self._ros_pubs:
+            (t_type, t_pub) = self._ros_pubs[topic]
             if t_type == topic_type:
                 return t_pub
             else:
                 raise Exception("topic '%s' already registered with a different type" % topic)
         else:
             try:
-                pub = rospy.Publisher("%s/%s"%(self.basename, topic), topic_type, **pub_args)
-                self.ros_pubs[topic] = (topic_type, pub)
+                pub = rospy.Publisher("%s/%s"%(self._basename, topic), topic_type, **pub_args)
+                self._ros_pubs[topic] = (topic_type, pub)
                 return pub
             except Exception as ex:
                 raise Exception("failed to create topic %s: %s" % (topic, ex.args[0]))
@@ -144,18 +163,18 @@ class MAVLinkBridge(object):
     # NOTE: if message_type == '*', will get called for ALL messages (almost)
     def add_mavlink_event(self, message_type, callback):
         if message_type == '*':
-            self.mav_events_all.append(callback)
-        elif message_type in self.mav_events:
-            self.mav_events[message_type].append(callback)
+            self._mav_events_all.append(callback)
+        elif message_type in self._mav_events:
+            self._mav_events[message_type].append(callback)
         else:
-            self.mav_events[message_type] = [callback]
+            self._mav_events[message_type] = [callback]
 
     # Add a callback that triggers on receipt of a ROS topic message
     # Callback should be of the form:
     #   foo(message, bridge_object)
     # NOTE: Can pass optional args to rospy.Subscriber() in *sub_args
     def add_ros_sub_event(self, topic, topic_type, callback, log=True, *sub_args):
-        if topic in self.ros_sub_events:
+        if topic in self._ros_sub_events:
             raise Exception("topic '%s' already has a subscriber" % topic)
         else:
             # This creates a closure with 'topic', 'callback', etc inside
@@ -167,8 +186,8 @@ class MAVLinkBridge(object):
                 except Exception as ex:
                     rospy.logwarn("ROS sub error (%s): %s" % (topic, ex.args[0]))
                 return True
-            self.ros_sub_events[topic] = \
-                rospy.Subscriber("%s/%s"%(self.basename, topic),
+            self._ros_sub_events[topic] = \
+                rospy.Subscriber("%s/%s"%(self._basename, topic),
                                  topic_type,
                                  callback_wrapper,
                                  *sub_args)
@@ -178,7 +197,7 @@ class MAVLinkBridge(object):
     #   foo(request, bridge_object)
     # NOTE: Can pass optional args to rospy.Service() in *srv_args
     def add_ros_srv_event(self, srv_name, srv_type, callback, log=True, *srv_args):
-        if srv_name in self.ros_srv_events:
+        if srv_name in self._ros_srv_events:
             raise Exception("service '%s' is already defined" % srv_name)
         else:
             # This creates a closure and adds some queueing logic
@@ -193,8 +212,8 @@ class MAVLinkBridge(object):
                     rospy.logwarn("ROS srv error (%s): %s" % (srv_name, ex.args[0]))
                 # TODO: return something the caller can handle
                 return True
-            self.ros_srv_events[srv_name] = \
-                rospy.Service("%s/%s"%(self.basename, srv_name),
+            self._ros_srv_events[srv_name] = \
+                rospy.Service("%s/%s"%(self._basename, srv_name),
                               srv_type,
                               callback_wrapper,
                               *srv_args)
@@ -209,7 +228,7 @@ class MAVLinkBridge(object):
             interval = 0
         else:
             interval = 1.0 / float(hz)
-        self.timed_events.append(MLBTimedEvent(interval, callback))
+        self._timed_events.append(MLBTimedEvent(interval, callback))
 
     ### Main loop ###
 
@@ -229,14 +248,14 @@ class MAVLinkBridge(object):
     # (necessary when first starting and possibly after rebooting AP)
     def _init_stream(self):
         # Wait for a heartbeat so we know the target system IDs
-        self.master.wait_heartbeat()
+        self._master.wait_heartbeat()
 
         # Set up output stream from master
-        self.master.mav.request_data_stream_send(
-            self.master.target_system,
-            self.master.target_component,
+        self._master.mav.request_data_stream_send(
+            self._master.target_system,
+            self._master.target_component,
             mavutil.mavlink.MAV_DATA_STREAM_ALL,
-            self.mavlink_rate,
+            self._mavlink_rate,
             1)
 
     # Initialize local clock and time variables
@@ -249,7 +268,7 @@ class MAVLinkBridge(object):
         rospy.loginfo("Waiting for usable SYSTEM_TIME message ...")
         msg = None
         while msg is None:
-            msg = self.master.recv_match(type='SYSTEM_TIME', blocking=True)
+            msg = self._master.recv_match(type='SYSTEM_TIME', blocking=True)
             if not msg.time_boot_ms:  # MUST determine boot time
                 msg = None
             if sync and not msg.time_unix_usec:  # If syncing, need GPS time
@@ -263,7 +282,7 @@ class MAVLinkBridge(object):
             ref_time = msg._timestamp
 
         # Record the real time when the AP booted (when time_boot_ms == 0)
-        self.ap_boot_time = rospy.Time.from_sec(
+        self._ap_boot_time = rospy.Time.from_sec(
                                 ref_time - float(msg.time_boot_ms) / 1e03)
 
         # If not updating the local clock, then we're done
@@ -300,14 +319,14 @@ class MAVLinkBridge(object):
             self._handle_statustext(msg)
 
         # If you *really* want to see what's coming out of mavlink
-        if self.spam_mavlink:
+        if self._spam_mavlink:
             print msg_type + " @ " + str(msg._timestamp) + ":\n  " \
                 + "\n  ".join("%s: %s" % (k, v) for (k, v) \
                               in sorted(vars(msg).items()) \
                               if not k.startswith('_'))
 
         # Run any all-types events
-        for ev in self.mav_events_all:
+        for ev in self._mav_events_all:
             try:
                 ev(msg_type, msg, self)
             except Exception as ex:
@@ -315,9 +334,9 @@ class MAVLinkBridge(object):
                               (msg_type, ex.args[0]))
 
         # Run any type-specific events
-        if msg_type not in self.mav_events:
+        if msg_type not in self._mav_events:
             return
-        for ev in self.mav_events[msg_type]:
+        for ev in self._mav_events[msg_type]:
             try:
                 ev(msg_type, msg, self)
             except Exception as ex:
@@ -328,7 +347,7 @@ class MAVLinkBridge(object):
     def _handle_timed(self, t=None):
         if not t:
             t = time.time()
-        for ev in self.timed_events:
+        for ev in self._timed_events:
             if ev.due(t):
                 # NOTE: technically, want to use the time when the event
                 # actually ran, but this is slightly more efficient.
@@ -339,28 +358,28 @@ class MAVLinkBridge(object):
     # NOTE: This is ugly since it relies on the internals of
     # pymavlink; if those change, this will break.
     def _handle_serial_relief(self, maxbytes):
-        if not isinstance(self.master, mavutil.mavserial):
+        if not isinstance(self._master, mavutil.mavserial):
             return
         try:
-            waiting = self.master.port.inWaiting()
+            waiting = self._master.port.inWaiting()
             if waiting > maxbytes:
-                self.master.port.read(waiting - maxbytes)
+                self._master.port.read(waiting - maxbytes)
         except Exception as ex:
             rospy.logwarn("Serial relief error: " + str(ex.args[0]))
 
     # Main loop that receives and handles mavlink messages
     def _mainloop(self):
         # Try to run this loop at >= LOOP_RATE Hz
-        r = rospy.Rate(self.loop_rate)
+        r = rospy.Rate(self._loop_rate)
         while not rospy.is_shutdown():
             # Try to keep serial line from being overwhelmed
-            if self.serial_relief:
-                self._handle_serial_relief(self.serial_relief)
+            if self._serial_relief:
+                self._handle_serial_relief(self._serial_relief)
 
             # Check for a MAVLink message
             msg = None
             try:
-                msg = self.master.recv_match(blocking=False)
+                msg = self._master.recv_match(blocking=False)
             except Exception as ex:
                 rospy.logwarn("MAV Recv error: " + ex.args[0])
 

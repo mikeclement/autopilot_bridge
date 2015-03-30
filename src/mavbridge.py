@@ -40,18 +40,18 @@ from MAVLinkBridge import MAVLinkBridge
 # .data - True arms, False disarms
 def sub_arm_throttle(message, bridge):
     if message.data:
-        bridge.master.arducopter_arm()
+        bridge.get_master().arducopter_arm()
     else:
-        bridge.master.arducopter_disarm()
+        bridge.get_master().arducopter_disarm()
 
 # Purpose: Changes autopilot mode
 # (must be in mode_mapping dictionary)
 # Fields: 
 # .data - string representing mode
 def sub_change_mode(message, bridge):
-    mav_map = bridge.master.mode_mapping()
+    mav_map = bridge.get_master().mode_mapping()
     if message.data in mav_map:
-        bridge.master.set_mode(mav_map[message.data])
+        bridge.get_master().set_mode(mav_map[message.data])
     else:
         raise Exception("invalid mode " + message.data)
 
@@ -61,9 +61,9 @@ def sub_change_mode(message, bridge):
 # .lon - Decimal degrees
 # .alt - Decimal meters **AGL wrt home**
 def sub_guided_goto(message, bridge):
-    bridge.master.mav.mission_item_send(
-        bridge.master.target_system,
-        bridge.master.target_component,
+    bridge.get_master().mav.mission_item_send(
+        bridge.get_master().target_system,
+        bridge.get_master().target_component,
         0,
         mavutil.mavlink.MAV_FRAME_GLOBAL_RELATIVE_ALT,
         mavutil.mavlink.MAV_CMD_NAV_WAYPOINT,
@@ -74,7 +74,7 @@ def sub_guided_goto(message, bridge):
 # Fields: 
 # .data - Must be an index in current mission set
 def sub_waypoint_goto(message, bridge):
-    bridge.master.waypoint_set_current_send(message.data)
+    bridge.get_master().waypoint_set_current_send(message.data)
 
 #-----------------------------------------------------------------------
 # Standard ROS publishers
@@ -221,11 +221,10 @@ if __name__ == '__main__':
     bridge.add_ros_sub_event("waypoint_goto", stdmsg.UInt16, sub_waypoint_goto) 
 
     # Register modules
-    loaded_modules = {}
     if args.module is not None:
         for m in args.module:
             m_name = "mavbridge_%s" % m
-            if m_name in loaded_modules:
+            if bridge.get_module(m_name) is not None:
                 print "Module '%s' already loaded" % m_name
                 continue
             try:
@@ -236,7 +235,7 @@ if __name__ == '__main__':
                 for comp in components[1:]:
                     m_obj = getattr(m_obj, comp)
                 reload(m_obj)
-                loaded_modules[m_name] = m_obj.init(bridge)
+                bridge.add_module(m, m_obj)
                 print "Module '%s' loaded successfully" % m_name
             except Exception as ex:
                 print "Failed to load module '%s': %s" % (m_name, str(ex.args[0]))

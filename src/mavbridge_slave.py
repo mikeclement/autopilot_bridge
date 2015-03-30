@@ -56,7 +56,7 @@ class mavbridge_slave(object):
                 for m in msgs:
                     # Only forward if not an excepted type
                     if m.get_type() not in mavbridge_slave.EXCEPTED_TYPES:
-                        bridge.master.write(m.get_msgbuf())
+                        bridge.get_master().write(m.get_msgbuf())
             except Exception:
                 rospy.logwarn("Error processing message from slave %s: %s" \
                               % (s, ex.args[0]))
@@ -110,7 +110,7 @@ class mavbridge_slave(object):
 # init()
 
 def init(bridge):
-    s_obj = mavbridge_slave(bridge.master)
+    s_obj = mavbridge_slave(bridge.get_master())
     bridge.add_mavlink_event("*", s_obj.mav_message)
     bridge.add_ros_srv_event("slave_setup", apsrv.SlaveSetup, s_obj.srv_setup)
     bridge.add_timed_event(20, s_obj.timed_message)

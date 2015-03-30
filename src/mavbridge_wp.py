@@ -68,11 +68,11 @@ class mavbridge_wp(object):
         if self._get(seq):
             (f, co, cu, a, p1, p2, p3, p4, x, y, z) = self._get(seq)
             wp = mavutil.mavlink.MAVLink_mission_item_message(
-                     bridge.master.target_system,
-                     bridge.master.target_component,
+                     bridge.get_master().target_system,
+                     bridge.get_master().target_component,
                      seq,
                      f, co, cu, a, p1, p2, p3, p4, x, y, z)
-            bridge.master.mav.send(wp)
+            bridge.get_master().mav.send(wp)
 
     ''' MAVLink waypoint state machine '''
 
@@ -99,7 +99,7 @@ class mavbridge_wp(object):
                 return
 
             # Make the first request
-            bridge.master.waypoint_request_send(self.fetch_current)
+            bridge.get_master().waypoint_request_send(self.fetch_current)
 
     # Handle incoming MISSION_ITEM messages
     def mav_mission_item(self, msg_type, msg, bridge):
@@ -115,7 +115,7 @@ class mavbridge_wp(object):
                 self.fetch_in_progress = False
             else:
                 self.fetch_current = msg.seq + 1
-                bridge.master.waypoint_request_send(self.fetch_current)
+                bridge.get_master().waypoint_request_send(self.fetch_current)
 
     # Handle incoming MISSION_REQUEST messages
     def mav_mission_request(self, msg_type, msg, bridge):
@@ -136,16 +136,16 @@ class mavbridge_wp(object):
         if self.fetch_in_progress and self._check_to():
             if self.fetch_current == -1:
                 # Retry getting the count
-                bridge.master.waypoint_request_list_send()
+                bridge.get_master().waypoint_request_list_send()
             else:
                 # Retry the current waypoint index
-                bridge.master.waypoint_request_send(self.fetch_current)
+                bridge.get_master().waypoint_request_send(self.fetch_current)
 
         # Retry cases for pushing
         if self.push_in_progress and self._check_to():
             if self.push_current == -1:
                 # Retry sending the count
-                bridge.master.waypoint_count_send(self._cnt())
+                bridge.get_master().waypoint_count_send(self._cnt())
             else:
                 # Retry sending the last-requested waypoint
                 self._push(bridge, self.push_current)
@@ -169,7 +169,7 @@ class mavbridge_wp(object):
         self.fetch_highest = high
         self.fetch_last_only = last_only
         self.fetch_in_progress = True
-        bridge.master.waypoint_request_list_send()
+        bridge.get_master().waypoint_request_list_send()
 
         # Wait up to N seconds for transaction to complete
         stop_time = time.time() + 10.0  # TODO: tune this
@@ -235,7 +235,7 @@ class mavbridge_wp(object):
         self._reset_to()
         self.push_current = -1
         self.push_in_progress = True
-        bridge.master.waypoint_count_send(self._cnt())
+        bridge.get_master().waypoint_count_send(self._cnt())
 
         # Wait up to 5 seconds for transaction to complete
         stop_time = time.time() + 5.0  # TODO: tune this
