@@ -12,11 +12,15 @@
 #-----------------------------------------------------------------------
 # Import libraries
 
+import rospy
 from pymavlink import mavutil
 import std_msgs.msg as stdmsg
+import std_srvs.srv as stdsrv
 import autopilot_bridge.msg as apmsg
 import autopilot_bridge.srv as apsrv
 import time
+from threading import RLock
+import math
 
 #-----------------------------------------------------------------------
 # Ugly globals
@@ -208,6 +212,45 @@ def srv_version(req, bridge):
             break
     return rsp
 
+# NOTE: relies on the 'fpr' module being loaded for param fetches
+def srv_demo_servos(req, bridge):
+    with srv_demo_servos.lock:
+        CYCLES = 3
+        CYCLE_SECS = 1.0
+
+        # Fetch servo limits and trim
+        # NOTE: Probably shouldn't use a "private" method in fpr
+        # NOTE: Probably should have some error handling here
+        get_param = bridge.get_module('fpr')._get_param
+        prm = {}
+        for pn in ['RC1_MIN', 'RC1_MAX', 'RC1_TRIM', 'RC2_TRIM', 'RC3_MIN']:
+            ret = get_param(pn, force=False)
+            if ret is None:
+                raise Exception("Could not fetch " + pn)
+            prm[pn] = ret
+
+        # Set up vector of PWM inputs and variables
+        pwms = [65535] * 8
+        pwms[1] = prm['RC2_TRIM']
+        pwms[2] = prm['RC3_MIN']
+        r_min = prm['RC1_MIN']
+        r_max = prm['RC1_MAX']
+        r_trm = prm['RC1_TRIM']
+
+        # Cycle through min/max CYCLES times, then back to trim
+        next_time = time.time()
+        for r in [r_min, r_max] * CYCLES + [r_trm]:
+            pwms[0] = r
+            bridge.get_master().mav.rc_channels_override_send(
+                bridge.get_master().target_system,
+                bridge.get_master().target_component,
+                *pwms)
+            next_time += CYCLE_SECS / 2.0
+            time.sleep(max(0.0, next_time - time.time()))
+
+    return {}
+srv_demo_servos.lock = RLock()
+
 #-----------------------------------------------------------------------
 # ROS subscriber handlers
 
@@ -293,6 +336,7 @@ def init(bridge):
     bridge.add_mavlink_event("GLOBAL_POS_ATT_NED", pub_pose_att_vel)
     bridge.add_ros_srv_event("calpress", apsrv.TimedAction, srv_calpress)
     bridge.add_ros_srv_event("version", apsrv.Version, srv_version)
+    bridge.add_ros_srv_event("demo_servos", stdsrv.Empty, srv_demo_servos)
     bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard, log=False)
     bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground, log=False)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
