@@ -122,6 +122,9 @@ def pub_status(msg_type, msg, bridge):
 #-----------------------------------------------------------------------
 # ROS service handlers
 
+# NOTE: Should be protected with a lock, since each service call
+# is handled in its own thread. Currently relies on the goodwill
+# of the calling nodes.
 def srv_calpress(req, bridge):
     # User must supply a positive timeout in seconds
     if req.timeout <= 0:
@@ -212,44 +215,92 @@ def srv_version(req, bridge):
             break
     return rsp
 
+# Demo servos and motor
 # NOTE: relies on the 'fpr' module being loaded for param fetches
-def srv_demo_servos(req, bridge):
-    with srv_demo_servos.lock:
-        CYCLES = 3
-        CYCLE_SECS = 1.0
+class Demos(object):
 
-        # Fetch servo limits and trim
-        # NOTE: Probably shouldn't use a "private" method in fpr
-        # NOTE: Probably should have some error handling here
-        get_param = bridge.get_module('fpr')._get_param
-        prm = {}
-        for pn in ['RC1_MIN', 'RC1_MAX', 'RC1_TRIM', 'RC2_TRIM', 'RC3_MIN']:
+    def __init__(self, bridge):
+        self._bridge = bridge
+        self._lock = RLock()
+        self._time = 0.0
+        self._pwms = []
+        self._prm = { 'RC1_MIN'  : None,
+                      'RC1_TRIM' : None,
+                      'RC1_MAX'  : None,
+                      'RC2_TRIM' : None,
+                      'RC3_MIN'  : None,
+                      'RC3_MAX'  : None }
+
+    # NOTE: Probably shouldn't use a "private" method in fpr
+    def _get_params(self):
+        get_param = self._bridge.get_module('fpr')._get_param
+        for pn in self._prm:
             ret = get_param(pn, force=False)
-            if ret is None:
+            if not isinstance(ret, float):
                 raise Exception("Could not fetch " + pn)
-            prm[pn] = ret
+            self._prm[pn] = ret
 
-        # Set up vector of PWM inputs and variables
-        pwms = [65535] * 8
-        pwms[1] = prm['RC2_TRIM']
-        pwms[2] = prm['RC3_MIN']
-        r_min = prm['RC1_MIN']
-        r_max = prm['RC1_MAX']
-        r_trm = prm['RC1_TRIM']
+    # NOTE: This is specific to our current platform
+    def _pwm_reset(self):
+        self._pwms = [65535] * 8
+        self._pwms[0] = self._prm['RC1_TRIM']
+        self._pwms[1] = self._prm['RC2_TRIM']
+        self._pwms[2] = self._prm['RC3_MIN']
 
-        # Cycle through min/max CYCLES times, then back to trim
-        next_time = time.time()
-        for r in [r_min, r_max] * CYCLES + [r_trm]:
-            pwms[0] = r
-            bridge.get_master().mav.rc_channels_override_send(
-                bridge.get_master().target_system,
-                bridge.get_master().target_component,
-                *pwms)
-            next_time += CYCLE_SECS / 2.0
-            time.sleep(max(0.0, next_time - time.time()))
+    # NOTE: This does very little sanity checking
+    def _pwm_set(self, chan, val):
+        # If we use 'MIN', 'MAX', or 'TRIM' for val, look up param
+        if isinstance(val, str):
+            pn = 'RC' + str(chan) + '_' + str(val)
+            if pn not in self._prm:
+                raise Exception("Don't have param " + pn)
+            val = self._prm[pn]
+        self._pwms[chan-1] = val
 
-    return {}
-srv_demo_servos.lock = RLock()
+    def _pwm_send(self):
+        self._bridge.get_master().mav.rc_channels_override_send(
+            self._bridge.get_master().target_system,
+            self._bridge.get_master().target_component,
+            *self._pwms)
+
+    def _time_reset(self):
+        self._time = time.time()
+
+    # Variable-time sleep based on how long previous ops have taken
+    def _time_sleep(self, max_time):
+        self._time += max_time
+        t = time.time()
+        if self._time > t:
+            time.sleep(self._time - t)
+
+    # Runs a sequence described by ((chan, val, wait), ...)
+    def _run_seq(self, seq):
+        with self._lock:
+            self._get_params()
+            self._pwm_reset()
+            self._time_reset()
+            for chan, val, wait in seq:
+                self._pwm_set(chan, val)
+                self._pwm_send()
+                self._time_sleep(wait)
+            self._pwm_reset()
+            self._pwm_send()
+
+    def run_servos(self, *args):
+        CYCLES = 3
+        WAIT = 0.5
+        seq = ((1, 'MIN', WAIT), (1, 'MAX', WAIT)) * CYCLES
+        self._run_seq(seq)
+        return {}
+
+    def run_motor(self, *args):
+        SHORT = 1.0
+        LONG = 2.0
+        self._get_params()
+        mid = (self._prm['RC3_MIN'] + self._prm['RC3_MAX']) / 2.0
+        seq = ((3, mid, SHORT), (3, 'MAX', LONG), (3, mid, SHORT))
+        self._run_seq(seq)
+        return {}
 
 #-----------------------------------------------------------------------
 # ROS subscriber handlers
@@ -329,14 +380,18 @@ def sub_reboot(message, bridge):
 #-----------------------------------------------------------------------
 # init()
 
+# Initialize Demo object
+
 def init(bridge):
+    acs_demo = Demos(bridge)
     bridge.add_mavlink_event("STATUSTEXT", mav_statustext)
     bridge.add_mavlink_event("AUTOPILOT_VERSION", mav_autopilot_version)
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
     bridge.add_mavlink_event("GLOBAL_POS_ATT_NED", pub_pose_att_vel)
     bridge.add_ros_srv_event("calpress", apsrv.TimedAction, srv_calpress)
     bridge.add_ros_srv_event("version", apsrv.Version, srv_version)
-    bridge.add_ros_srv_event("demo_servos", stdsrv.Empty, srv_demo_servos)
+    bridge.add_ros_srv_event("demo_servos", stdsrv.Empty, acs_demo.run_servos)
+    bridge.add_ros_srv_event("demo_motor", stdsrv.Empty, acs_demo.run_motor)
     bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard, log=False)
     bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground, log=False)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
@@ -344,4 +399,4 @@ def init(bridge):
     bridge.add_ros_sub_event("land_abort", stdmsg.UInt16, sub_landing_abort)
     bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA, sub_payload_waypoint, log=False) 
     bridge.add_ros_sub_event("reboot", stdmsg.Empty, sub_reboot)
-    return True
+    return acs_demo  # Just in case it would get GC'ed otherwise
