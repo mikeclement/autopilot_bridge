@@ -39,16 +39,6 @@ mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
 #-----------------------------------------------------------------------
 # MAVLink message handlers
 
-def mav_statustext(msg_type, msg, bridge):
-    # Sets the flag for calibration service (see below)
-    if str(msg.text) == "Calibrating barometer":
-        srv_calpress.started = True
-    if str(msg.text) == "zero airspeed calibrated":
-        srv_calpress.done = True
-
-def mav_autopilot_version(msg_type, msg, bridge):
-    srv_version.msg = msg
-
 def pub_pose_att_vel(msg_type, msg, bridge):
     pub = bridge.get_ros_pub("acs_pose", apmsg.Geodometry, queue_size=1)
     odom = apmsg.Geodometry()
@@ -120,100 +110,74 @@ def pub_status(msg_type, msg, bridge):
     pub.publish(sta)
 
 #-----------------------------------------------------------------------
-# ROS service handlers
+# ROS service handling classes
 
-# NOTE: Should be protected with a lock, since each service call
-# is handled in its own thread. Currently relies on the goodwill
-# of the calling nodes.
-def srv_calpress(req, bridge):
-    # User must supply a positive timeout in seconds
-    if req.timeout <= 0:
-        return { 'ok' : False }
+# Autopilot calibration services
+class Calibrations(object):
 
-    # Reset attributes
-    srv_calpress.started = False
-    srv_calpress.done = False
+    def __init__(self, bridge):
+        self._bridge = bridge
+        self._lock = RLock()
+        self._running = False
+        self._started = False
+        self._finished = False
 
-    # Cycle, waiting for flag to be raised (see mavlink handler above)
-    end_time = time.time() + req.timeout
-    while time.time() < end_time:
-        if not srv_calpress.started:
-            # Retry as needed
-            bridge.get_master().calibrate_pressure()
-        time.sleep(0.5)  # NOTE: may round to next increment
-        if srv_calpress.done:
-            return { 'ok' : True }
-    return { 'ok' : False }
+        # Register events
+        bridge.add_mavlink_event("STATUSTEXT", self._statustext)
+        bridge.add_ros_srv_event("calpress", apsrv.TimedAction,
+            lambda r,b: self._calibrate(r.timeout, press=True))
+        bridge.add_ros_srv_event("calgyro", apsrv.TimedAction,
+            lambda r,b: self._calibrate(r.timeout, gyro=True))
 
-# Initialize attributes
-srv_calpress.started = False
-srv_calpress.done = False
+    def _statustext(self, msg_type, msg, bridge):
+        # STATUSTEXT messages tell us the progress
+        if str(msg.text) == "Beginning INS calibration; do not move plane":
+            self._started = True
+        elif str(msg.text) == "Calibrating barometer":
+            self._started = True
+        elif str(msg.text) == "zero airspeed calibrated":
+            self._finished = True
 
-def srv_version(req, bridge):
-    # User must supply a positive timeout in seconds
-    if req.timeout <= 0:
-        return { 'ok' : False }
+    def _calibrate(self, timeout, gyro=False, press=False):
+        # User must supply a positive timeout in seconds
+        if timeout <= 0:
+            return { 'ok' : False }
 
-    # Init/reset variables
-    srv_version.msg = None
-    rsp = apsrv.VersionResponse()
-    rsp.ok = False
+        # Protect checking if already calibrating
+        with self._lock:
+            if self._running:
+                return { 'ok' : False }
+            self._running = True
 
-    # Cycle, waiting for flag to be raised (see mavlink handler above)
-    end_time = time.time() + req.timeout
-    while time.time() < end_time:
-        # (re)send request each cycle
-        bridge.get_master().mav.autopilot_version_request_send(
-            mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
-            mavutil.mavlink.MAV_TYPE_GENERIC)
-        time.sleep(0.2)  # NOTE: may round to next 0.2s increment
-        if srv_version.msg is not None:
-            print str(srv_version.msg)
-            # Shorter variable names for less typing
-            msg = srv_version.msg
-            mav = mavutil.mavlink
+        try:
+            # Reset attributes
+            self._started = False
+            self._finished = False
 
-            rsp.ok = True
+            # Cycle, trying to initiate and awaiting response
+            end_time = time.time() + timeout
+            while time.time() < end_time:
+                # Retry if needed
+                if not self._started:
+                    self._bridge.get_master().mav.command_long_send(
+                        self._bridge.get_master().target_system,
+                        self._bridge.get_master().target_component,
+                        mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION,
+                        0, int(gyro), 0, int(press), 0, 0, 0, 0)
 
-            rsp.cap_mission_float = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_MISSION_FLOAT
-            rsp.cap_param_float = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_PARAM_FLOAT
-            rsp.cap_mission_int = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_MISSION_INT
-            rsp.cap_command_int = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_COMMAND_INT
-            rsp.cap_param_union = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_PARAM_UNION
-            rsp.cap_ftp = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_FTP
-            rsp.cap_set_attitude = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_SET_ATTITUDE_TARGET
-            rsp.cap_set_position_local = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_LOCAL_NED
-            rsp.cap_set_position_global = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_GLOBAL_INT
-            rsp.cap_terrain = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_TERRAIN
-            rsp.cap_set_actuator = msg.capabilities & \
-                mav.MAV_PROTOCOL_CAPABILITY_SET_ACTUATOR_TARGET
+                # Give the system some time
+                time.sleep(1.0)
 
-            rsp.flight_sw = msg.flight_sw_version
-            rsp.middleware = msg.middleware_sw_version
-            rsp.os_sw = msg.os_sw_version
-            rsp.board = msg.board_version
-            rsp.flight_custom = ''.join(map(lambda x: chr(x),
-                                            msg.flight_custom_version))
-            rsp.middleware_custom = ''.join(map(lambda x: chr(x),
-                                                msg.middleware_custom_version))
-            rsp.os_custom = ''.join(map(lambda x: chr(x),
-                                        msg.os_custom_version))
-            rsp.vendor_id = msg.vendor_id
-            rsp.product_id = msg.product_id
-            rsp.uid = msg.uid
-
-            break
-    return rsp
+                # See if it's finished
+                if self._finished:
+                    break
+        except Exception as ex:
+            rospy.logwarn("Calibration exception: " + str(ex.args[0]))
+        finally:
+            # Release for other users to re-calibrate
+            with self._lock:
+                self._running = False
+                return { 'ok' : self._finished }
 
 # Demo servos and motor
 # NOTE: relies on the 'fpr' module being loaded for param fetches
@@ -222,6 +186,7 @@ class Demos(object):
     def __init__(self, bridge):
         self._bridge = bridge
         self._lock = RLock()
+        self._running = False
         self._time = 0.0
         self._pwms = []
         self._prm = { 'RC1_MIN'  : None,
@@ -230,6 +195,10 @@ class Demos(object):
                       'RC2_TRIM' : None,
                       'RC3_MIN'  : None,
                       'RC3_MAX'  : None }
+
+        # Register events
+        bridge.add_ros_srv_event("demo_servos", stdsrv.Empty, self._servos)
+        bridge.add_ros_srv_event("demo_motor", stdsrv.Empty, self._motor)
 
     # NOTE: Probably shouldn't use a "private" method in fpr
     def _get_params(self):
@@ -275,7 +244,14 @@ class Demos(object):
 
     # Runs a sequence described by ((chan, val, wait), ...)
     def _run_seq(self, seq):
+        # Protect checking if already demoing
         with self._lock:
+            if self._running:
+                return {}
+            self._running = True
+
+        # Run the demo
+        try:
             self._get_params()
             self._pwm_reset()
             self._time_reset()
@@ -285,15 +261,22 @@ class Demos(object):
                 self._time_sleep(wait)
             self._pwm_reset()
             self._pwm_send()
+        except Exception as ex:
+            rospy.logwarn("Demo exception: " + str(ex.args[0]))
+        finally:
+            # Release for other users to demo
+            with self._lock:
+                self._running = False
+            return {}
 
-    def run_servos(self, *args):
+    def _servos(self, *args):
         CYCLES = 3
         WAIT = 0.5
         seq = ((1, 'MIN', WAIT), (1, 'MAX', WAIT)) * CYCLES
         self._run_seq(seq)
         return {}
 
-    def run_motor(self, *args):
+    def _motor(self, *args):
         SHORT = 1.0
         LONG = 2.0
         self._get_params()
@@ -301,6 +284,94 @@ class Demos(object):
         seq = ((3, mid, SHORT), (3, 'MAX', LONG), (3, mid, SHORT))
         self._run_seq(seq)
         return {}
+
+class Version(object):
+
+    def __init__(self, bridge):
+        self._bridge = bridge
+        self._msg = None
+
+        # Register events
+        bridge.add_mavlink_event("AUTOPILOT_VERSION", self._mav)
+        bridge.add_ros_srv_event("version", apsrv.Version, self._version)
+
+    def _reply(self):
+        rsp = apsrv.VersionResponse()
+
+        # Shorter variable names for less typing
+        msg = self._msg
+        mav = mavutil.mavlink
+
+        rsp.ok = True
+
+        rsp.cap_mission_float = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_MISSION_FLOAT
+        rsp.cap_param_float = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_PARAM_FLOAT
+        rsp.cap_mission_int = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_MISSION_INT
+        rsp.cap_command_int = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_COMMAND_INT
+        rsp.cap_param_union = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_PARAM_UNION
+        rsp.cap_ftp = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_FTP
+        rsp.cap_set_attitude = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_SET_ATTITUDE_TARGET
+        rsp.cap_set_position_local = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_LOCAL_NED
+        rsp.cap_set_position_global = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_SET_POSITION_TARGET_GLOBAL_INT
+        rsp.cap_terrain = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_TERRAIN
+        rsp.cap_set_actuator = msg.capabilities & \
+            mav.MAV_PROTOCOL_CAPABILITY_SET_ACTUATOR_TARGET
+
+        rsp.flight_sw = msg.flight_sw_version
+        rsp.middleware = msg.middleware_sw_version
+        rsp.os_sw = msg.os_sw_version
+        rsp.board = msg.board_version
+        rsp.flight_custom = ''.join(map(lambda x: chr(x),
+                                        msg.flight_custom_version))
+        rsp.middleware_custom = ''.join(map(lambda x: chr(x),
+                                            msg.middleware_custom_version))
+        rsp.os_custom = ''.join(map(lambda x: chr(x),
+                                    msg.os_custom_version))
+        rsp.vendor_id = msg.vendor_id
+        rsp.product_id = msg.product_id
+        rsp.uid = msg.uid
+
+        return rsp
+
+    def _mav(self, msg_type, msg, bridge):
+        self._msg = msg
+
+    def _version(self, req, bridge):
+        # If we already have the message, just use it
+        if self._msg:
+            return self._reply()
+
+        # User must supply a positive timeout in seconds
+        if req.timeout <= 0:
+            return { 'ok' : False }
+
+        # Cycle, request and awaiting a response
+        end_time = time.time() + req.timeout
+        while time.time() < end_time:
+            # Send the version request
+            bridge.get_master().mav.autopilot_version_request_send(
+                mavutil.mavlink.MAV_TYPE_ONBOARD_CONTROLLER,
+                mavutil.mavlink.MAV_TYPE_GENERIC)
+
+            # Wait a moment
+            time.sleep(0.2)
+
+            # Check for a response
+            if self._msg:
+                return self._reply()
+
+        # If no response within timeout, fail
+        return { 'ok' : False }
 
 #-----------------------------------------------------------------------
 # ROS subscriber handlers
@@ -383,20 +454,26 @@ def sub_reboot(message, bridge):
 # Initialize Demo object
 
 def init(bridge):
-    acs_demo = Demos(bridge)
-    bridge.add_mavlink_event("STATUSTEXT", mav_statustext)
-    bridge.add_mavlink_event("AUTOPILOT_VERSION", mav_autopilot_version)
+    # MAVLink events
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
     bridge.add_mavlink_event("GLOBAL_POS_ATT_NED", pub_pose_att_vel)
-    bridge.add_ros_srv_event("calpress", apsrv.TimedAction, srv_calpress)
-    bridge.add_ros_srv_event("version", apsrv.Version, srv_version)
-    bridge.add_ros_srv_event("demo_servos", stdsrv.Empty, acs_demo.run_servos)
-    bridge.add_ros_srv_event("demo_motor", stdsrv.Empty, acs_demo.run_motor)
-    bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat, sub_heartbeat_onboard, log=False)
-    bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat, sub_heartbeat_ground, log=False)
+
+    # (Fairly) idempotent subscribers
+    bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat,
+                             sub_heartbeat_onboard, log=False)
+    bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat,
+                             sub_heartbeat_ground, log=False)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
     bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)
     bridge.add_ros_sub_event("land_abort", stdmsg.UInt16, sub_landing_abort)
-    bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA, sub_payload_waypoint, log=False) 
+    bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA,
+                             sub_payload_waypoint, log=False)
     bridge.add_ros_sub_event("reboot", stdmsg.Empty, sub_reboot)
-    return acs_demo  # Just in case it would get GC'ed otherwise
+
+    # Services handled in classes
+    acs_cal = Calibrations(bridge)
+    acs_demo = Demos(bridge)
+    acs_ver = Version(bridge)
+
+    # Return object references just in case objects would otherwise get GC'd
+    return (acs_cal, acs_demo, acs_ver)
