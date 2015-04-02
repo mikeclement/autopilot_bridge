@@ -124,9 +124,9 @@ class Calibrations(object):
 
         # Register events
         bridge.add_mavlink_event("STATUSTEXT", self._statustext)
-        bridge.add_ros_srv_event("calpress", apsrv.TimedAction,
+        bridge.add_ros_srv_event("cal_pressure", apsrv.TimedAction,
             lambda r,b: self._calibrate(r.timeout, press=True))
-        bridge.add_ros_srv_event("calgyro", apsrv.TimedAction,
+        bridge.add_ros_srv_event("cal_gyros", apsrv.TimedAction,
             lambda r,b: self._calibrate(r.timeout, gyro=True))
 
     def _statustext(self, msg_type, msg, bridge):
@@ -137,6 +137,13 @@ class Calibrations(object):
             self._started = True
         elif str(msg.text) == "zero airspeed calibrated":
             self._finished = True
+
+    def _send(self, gyro, press):
+        self._bridge.get_master().mav.command_long_send(
+            self._bridge.get_master().target_system,
+            self._bridge.get_master().target_component,
+            mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION,
+            0, int(gyro), 0, int(press), 0, 0, 0, 0)
 
     def _calibrate(self, timeout, gyro=False, press=False):
         # User must supply a positive timeout in seconds
@@ -153,17 +160,17 @@ class Calibrations(object):
             # Reset attributes
             self._started = False
             self._finished = False
+            end_time = time.time() + timeout
+
+            # Send once and wait a bit
+            self._send(gyro, press)
+            time.sleep(2.0)
 
             # Cycle, trying to initiate and awaiting response
-            end_time = time.time() + timeout
             while time.time() < end_time:
                 # Retry if needed
                 if not self._started:
-                    self._bridge.get_master().mav.command_long_send(
-                        self._bridge.get_master().target_system,
-                        self._bridge.get_master().target_component,
-                        mavutil.mavlink.MAV_CMD_PREFLIGHT_CALIBRATION,
-                        0, int(gyro), 0, int(press), 0, 0, 0, 0)
+                    self._send(gyro, press)
 
                 # Give the system some time
                 time.sleep(1.0)
