@@ -28,6 +28,7 @@ add_service_files(
   FILES
   FenceGetAll.srv
   FenceSetAll.srv
+  FileLoad.srv
   ParamGet.srv
   ParamGetList.srv
   ParamSet.srv
