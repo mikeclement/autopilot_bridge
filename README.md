@@ -161,6 +161,18 @@ lists of fence points, and lists of rally points. It can be used in place of the
  * `autopilot/fpr_rally_getall` - Get all rally points in the autopilot
  * `autopilot/fpr_rally_setall` - Clear and set all rally points in the autopilot
 
+### file - Load configurations from files
+
+The 'file' module provides services for loading files in the same formats used
+by pymavlink and MAVProxy, with some limitations. It provides the following
+additional ROS elements:
+
+* Services
+ * `autopilot/load_fence` - Load a fence file
+ * `autopilot/load_param` - Load a parameter file
+ * `autopilot/load_rally` - Load a rally file
+ * `autopilot/load_wp` - Load a waypoint file
+
 ### slave - Ground station slaving
 
 The 'slave' module allows "slaving" or "chaining" other MAVLink-speaking applications
