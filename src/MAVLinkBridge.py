@@ -13,6 +13,7 @@
 # Import libraries
 
 # Python imports
+import glob
 import os
 import time
 
@@ -59,6 +60,8 @@ class MAVLinkBridge(object):
                  spam_mavlink=False):      # Print ALL MAVLink messages
 
         # Settings that get used later
+        self._device = device
+        self._baudrate = baudrate
         self._basename = basename
         self._spam_mavlink = spam_mavlink
         self._loop_rate = loop_rate
@@ -84,14 +87,7 @@ class MAVLinkBridge(object):
 
         # Initialize mavlink connection
         try:
-            # Open connection
-            self._master = mavutil.mavlink_connection(
-                device,
-                int(baudrate),
-                autoreconnect=True)
-            # Perform internal initialization
-            self._init_stream()
-            self._init_time(sync_local_clock)
+            self._initialize(sync_local_clock)
         except Exception as ex:
             raise Exception("MAVLink init error: " + str(ex.args[0]))
 
@@ -245,9 +241,45 @@ class MAVLinkBridge(object):
     ### Internals ###
 
     # Perform initialization of MAVLink stream
-    # (necessary when first starting and possibly after rebooting AP)
-    def _init_stream(self):
+    # Necessary on startup and if connection fails
+    def _initialize(self, sync=False):
+        # Cycle until we find a usable device
+        while True:
+            try:
+                device = self._device
+
+                # If auto-detecting, find a device to try
+                # NOTE: based on pymavlink, with some needed mods
+                if device is None:
+                    # Generic search order
+                    devlist = glob.glob('/dev/ttyUSB*') + \
+                              glob.glob('/dev/ttyACM*') + \
+                              glob.glob('/dev/ttyAMA*') + \
+                              glob.glob('/dev/serial/by-id/*') + \
+                              glob.glob('/dev/ttyS*')
+                else:
+                    # Handles '*' in device name, or exact device
+                    devlist = glob.glob(device)
+                if len(devlist) == 0:
+                    raise Exception("Could not find a suitable device")
+                device = devlist[0]
+
+                # Create connection
+                rospy.loginfo("MAVLinkBridge: Connecting to %s ..." % device)
+                self._master = mavutil.mavlink_connection(
+                    device,
+                    int(self._baudrate),
+                    autoreconnect=True)
+
+                # If succeeded, move on to rest of init
+                break
+
+            except Exception as ex:
+                rospy.logwarn("MAVLinkBridge: " + str(ex.args[0]))
+                time.sleep(1)
+
         # Wait for a heartbeat so we know the target system IDs
+        rospy.loginfo("Waiting for autopilot heartbeat ...")
         self._master.wait_heartbeat()
 
         # Set up output stream from master
@@ -257,6 +289,10 @@ class MAVLinkBridge(object):
             mavutil.mavlink.MAV_DATA_STREAM_ALL,
             self._mavlink_rate,
             1)
+
+        # Initialize clock reference
+        self._init_time(sync)
+        rospy.loginfo("MAVLinkBridge initialized.")
 
     # Initialize local clock and time variables
     # Can either sync with AP time or use the local clock; either way,
@@ -378,10 +414,17 @@ class MAVLinkBridge(object):
 
             # Check for a MAVLink message
             msg = None
+            ex_msg = None
             try:
                 msg = self._master.recv_match(blocking=False)
             except Exception as ex:
-                rospy.logwarn("MAV Recv error: " + ex.args[0])
+                rospy.logwarn("MAV Recv error: " + str(ex.args[0]))
+                ex_msg = str(ex.args[0])
+
+            # Do additional error handling
+            if ex_msg and 'device disconnected' in ex_msg:
+                # Try to reconnect (device might have moved)
+                self._initialize()
 
             # Process the message
             if msg:

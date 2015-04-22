@@ -150,7 +150,7 @@ if __name__ == '__main__':
     # TODO: Make these ROS params
     parser = ArgumentParser("rosrun autopilot_bridge mavbridge.py")
     parser.add_argument('-d', "--device", dest="device", 
-                        help="serial device or network socket", default="auto-detect")
+                        help="serial device or network socket", default=None)
     parser.add_argument('-b', "--baudrate", dest="baudrate", type=int,
                         help="serial baud rate", default=57600)
     parser.add_argument('-m', "--module", dest="module", action='append', 
@@ -168,33 +168,21 @@ if __name__ == '__main__':
                         action="store_true", default=False,
                         help="print every received mavlink message")
     args = parser.parse_args(args=rospy.myargv(argv=sys.argv)[1:])
-    
-    # If device isn't explicitly specified, try to detect it
-    # TODO: Might make better use of /dev/serial/by-id/*
-    #  for some devices, like the SiK telemetry radio
-    if args.device == "auto-detect":
-        if os.path.exists("/dev/ttyACM0"):  # Indicates USB
-            args.device = "/dev/ttyACM0"
-            args.baudrate = 115200
-        elif os.path.exists("/dev/ttyUSB0"):  # Indicates radio
-            args.device = "/dev/ttyUSB0"
-        elif os.path.exists("/dev/ttyAMA0"):  # Indicates serial
-            args.device = "/dev/ttyAMA0"
-        else:
-            print "Error: could not find a suitable device.\n"
-            sys.exit(-1)
-    elif args.device.find(':') == -1:
+
+    # Handle special device cases
+    if args.device and args.device.find(':') == -1:
+        # If specifying a device and not a network connection
         if ',' in args.device:
+            # Allow "device,baudrate" syntax for convenience
             args.device, args.baudrate = args.device.split(',')
-        if not os.path.exists(args.device):
-            # ':' check allows for specifying network sockets
-            print "Specified device doesn't exist.\n"
-            sys.exit(-1)
 
     # User-friendly hello message
+    dev = args.device
+    if args.device is None: dev = "auto-detect"
     print "Starting MAVLink <-> ROS interface over the following link:\n" + \
-          ("  device:\t\t%s\n" % args.device) + \
+          ("  device:\t\t%s\n" % dev) + \
           ("  baudrate:\t\t%s\n" % str(args.baudrate))
+
 
     # Initialize the bridge
     try:
