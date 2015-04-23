@@ -243,43 +243,52 @@ class MAVLinkBridge(object):
     # Perform initialization of MAVLink stream
     # Necessary on startup and if connection fails
     def _initialize(self, sync=False):
-        # Cycle until we find a usable device
-        while True:
+        # Try to close any old connection first
+        if self._master is not None:
             try:
-                device = self._device
+                self._master.close()
+            except:
+                pass
 
-                # If auto-detecting, find a device to try
-                # NOTE: based on pymavlink, with some needed mods
-                if device is None:
-                    # Generic search order
-                    devlist = glob.glob('/dev/ttyUSB*') + \
-                              glob.glob('/dev/ttyACM*') + \
-                              glob.glob('/dev/ttyAMA*') + \
-                              glob.glob('/dev/serial/by-id/*') + \
-                              glob.glob('/dev/ttyS*')
-                else:
-                    # Handles '*' in device name, or exact device
-                    devlist = glob.glob(device)
-                if len(devlist) == 0:
-                    raise Exception("Could not find a suitable device")
-                device = devlist[0]
+        # Cycle until device becomes available and we can connect to it
+        device_not_found_once = False
+        while not rospy.is_shutdown():
+            device = self._device
 
-                # Create connection
+            # If not a network connection, check for matching file
+            if device is None or ':' not in device:
+                device = self._find_device(device)
+
+            # If no device found
+            if device is None:
+                # Display a warning (first time)
+                if not device_not_found_once:
+                    rospy.logwarn("MAVLinkBridge: no device found, " + \
+                                  "will keep checking ...")
+                    device_not_found_once = True
+
+                # Wait a moment, then try again
+                time.sleep(1)
+                continue
+
+            # Try to create connection
+            try:
                 rospy.loginfo("MAVLinkBridge: Connecting to %s ..." % device)
                 self._master = mavutil.mavlink_connection(
                     device,
                     int(self._baudrate),
                     autoreconnect=True)
-
-                # If succeeded, move on to rest of init
-                break
-
             except Exception as ex:
                 rospy.logwarn("MAVLinkBridge: " + str(ex.args[0]))
-                time.sleep(1)
+
+            # If succeeded, move on to rest of init
+            break
+
+            # If failed, wait a moment then try again
+            time.sleep(1)
 
         # Wait for a heartbeat so we know the target system IDs
-        rospy.loginfo("Waiting for autopilot heartbeat ...")
+        rospy.loginfo("MAVLinkBridge: Waiting for autopilot heartbeat ...")
         self._master.wait_heartbeat()
 
         # Set up output stream from master
@@ -294,6 +303,24 @@ class MAVLinkBridge(object):
         self._init_time(sync)
         rospy.loginfo("MAVLinkBridge initialized.")
 
+    # Find a matching device by name, or search for serial devices
+    def _find_device(self, device):
+        # If auto-detecting, find a device to try
+        # NOTE: based on pymavlink, with some mods for our typical use
+        if device is None:
+            # Generic search order
+            devlist = glob.glob('/dev/ttyUSB*') + \
+                      glob.glob('/dev/ttyACM*') + \
+                      glob.glob('/dev/ttyAMA*') + \
+                      glob.glob('/dev/serial/by-id/*') + \
+                      glob.glob('/dev/ttyS*')
+        else:
+            # Handles '*' in device name, or exact device
+            devlist = glob.glob(device)
+        if len(devlist) == 0:
+            return None
+        return devlist[0]
+
     # Initialize local clock and time variables
     # Can either sync with AP time or use the local clock; either way,
     # want to know when AP booted so we can project other message times
@@ -301,7 +328,7 @@ class MAVLinkBridge(object):
     # time initialization, but it doesn't seem helpful.
     def _init_time(self, sync=False):
         # Wait for a valid SYSTEM_TIME message
-        rospy.loginfo("Waiting for usable SYSTEM_TIME message ...")
+        rospy.loginfo("MAVLinkBridge: Waiting for usable SYSTEM_TIME ...")
         msg = None
         while msg is None:
             msg = self._master.recv_match(type='SYSTEM_TIME', blocking=True)
