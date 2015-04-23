@@ -71,21 +71,17 @@ rosrun autopilot_bridge mavbridge.py [options ...]
 
 You can specify --help at the end of the command to see all options.
 Generally, you will want to specify the device or network connection using `-d` or `--device`.
-If omitted, mavbridge will attempt to autodetect a serial device.
-Serial link speed can be specified using `-b` or `--baudrate`.
+You can also specify the serial link speed using `-b` or `--baudrate` (the default is 57600 baud).
+The following are all examples of legal device and baudrate syntax:
 
-To run over serial device /dev/ttyS3 at 57600 baud:
+* `-d /dev/ttyS3 -b 115200`
+* `-d /dev/ttyUSB*` (use the first matching device, if found, at 57600 baud)
+* `-d /dev/ttyUSB1,115200` (overrides `-b`)
+* `-d tcp:127.0.0.1:5762` (ignores `-b`)
 
-```bash
-rosrun autopilot_bridge mavbridge.py -d /dev/ttyS3 -b 57600
-```
+If `-d` is omitted, mavbridge will attempt to find a serial port and use it.
 
-To run over a TCP connection to a Simulation-In-The-Loop (SITL) instance running
-locally on port 5762:
-
-```bash
-rosrun autopilot_bridge mavbridge.py -d tcp:127.0.0.1:5762
-```
+If an appropriate device cannot be found on startup, mavbridge will fail and shut down. However, once up and running, mavbridge will detect a device disconnect or failure and attempt to reconnect using the same specification given at startup. Hence, if `-d /dev/ttyUSB*` is specified and mavbridge finds `/dev/ttyUSB0`, and then the USB serial device is momentarily disconnected and reappears as `/dev/ttyUSB1`, mavbridge _should_ detect and start using this. Of course, there are plenty of edge cases that are not handled; use wildcards with care!
 
 Some additional options:
 
