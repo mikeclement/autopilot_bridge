@@ -216,9 +216,12 @@ class Demos(object):
                 raise Exception("Could not fetch " + pn)
             self._prm[pn] = ret
 
-    # NOTE: This is specific to our current platform
     def _pwm_reset(self):
-        self._pwms = [65535] * 8
+        self._pwms = [0] * 8
+
+    # NOTE: This is specific to our current platform
+    def _pwm_trim(self):
+        self._pwm_reset()
         self._pwms[0] = self._prm['RC1_TRIM']
         self._pwms[1] = self._prm['RC2_TRIM']
         self._pwms[2] = self._prm['RC3_MIN']
@@ -259,14 +262,18 @@ class Demos(object):
 
         # Run the demo
         try:
-            self._get_params()
-            self._pwm_reset()
+            self._get_params()  # Trim all surfaces first
+            self._pwm_trim()
+            time.sleep(0.1)  # Let things settle
             self._time_reset()
             for chan, val, wait in seq:
                 self._pwm_set(chan, val)
                 self._pwm_send()
                 self._time_sleep(wait)
-            self._pwm_reset()
+            self._pwm_trim()  # Back to trim
+            self._pwm_send()
+            time.sleep(0.1)  # Let things settle
+            self._pwm_reset()  # Undo overrides
             self._pwm_send()
         except Exception as ex:
             rospy.logwarn("Demo exception: " + str(ex.args[0]))
