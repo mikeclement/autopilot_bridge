@@ -199,7 +199,9 @@ class Demos(object):
         self._prm = { 'RC1_MIN'  : None,
                       'RC1_TRIM' : None,
                       'RC1_MAX'  : None,
+                      'RC2_MIN'  : None,
                       'RC2_TRIM' : None,
+                      'RC2_MAX'  : None,
                       'RC3_MIN'  : None,
                       'RC3_MAX'  : None }
 
@@ -283,10 +285,12 @@ class Demos(object):
                 self._running = False
             return {}
 
+    # UP, DOWN, LEFT, RIGHT
     def _servos(self, *args):
-        CYCLES = 3
-        WAIT = 0.5
-        seq = ((1, 'MIN', WAIT), (1, 'MAX', WAIT)) * CYCLES
+        WAIT = 1.0
+        seq = ((2, 'MAX', WAIT), (2, 'MIN', WAIT),
+               (2, 'TRIM', 0.0),
+               (1, 'MIN', WAIT), (1, 'MAX', WAIT))
         self._run_seq(seq)
         return {}
 
