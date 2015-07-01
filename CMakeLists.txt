@@ -22,6 +22,7 @@ add_message_files(
   Rallypoint.msg
   Status.msg
   Waypoint.msg
+  WeatherData.msg
 )
 
 add_service_files(

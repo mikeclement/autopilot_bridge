@@ -466,6 +466,12 @@ def sub_payload_waypoint(message, bridge):
 def sub_reboot(message, bridge):
     bridge.get_master().reboot_autopilot()
 
+# Purpose: update the autopilot ground weather settings
+def sub_weather_update(message, bridge):
+    bridge.get_module('fpr')._set_param('GND_ABS_PRESS', 
+            int(message.baro_millibars*100.0))
+    bridge.get_module('fpr')._set_param('GND_TEMP', message.temp_C)
+                
 #-----------------------------------------------------------------------
 # init()
 
@@ -487,6 +493,7 @@ def init(bridge):
     bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA,
                              sub_payload_waypoint, log=False)
     bridge.add_ros_sub_event("reboot", stdmsg.Empty, sub_reboot)
+    bridge.add_ros_sub_event("weather_update", apmsg.WeatherData, sub_weather_update) 
 
     # Services handled in classes
     acs_cal = Calibrations(bridge)
