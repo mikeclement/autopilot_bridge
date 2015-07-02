@@ -468,9 +468,10 @@ def sub_reboot(message, bridge):
 
 # Purpose: update the autopilot ground weather settings
 def sub_weather_update(message, bridge):
-    bridge.get_module('fpr')._set_param('GND_ABS_PRESS', 
-            int(message.baro_millibars*100.0))
-    bridge.get_module('fpr')._set_param('GND_TEMP', message.temp_C)
+    bridge.get_master().mav.raw_pressure_send(
+            int(bridge.project_ap_time().to_nsec() / 1000.0),
+            int(message.baro_millibars * 10.0), 0, 0, 
+            int(message.temp_C * 100.0))
                 
 #-----------------------------------------------------------------------
 # init()
