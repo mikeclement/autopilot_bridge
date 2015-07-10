@@ -364,12 +364,16 @@ class MAVLinkBridge(object):
 
     # Handle special STATUSTEXT messages
     def _handle_statustext(self, msg):
-        # Log all messages
-        rospy.loginfo("MAVLink STATUSTEXT: %s" % msg.text)
-
         # Autopilot rebooted, need to re-init time
         if 'Ready to FLY.' in msg.text:
             self._init_time()
+
+        # NOTE: Filtering out spam messages with little content
+        if msg.text == "command received: ":
+            return
+
+        # Log rest of messages
+        rospy.loginfo("MAVLink STATUSTEXT: %s" % msg.text)
 
     # Handle a received MAVLink message
     def _handle_msg(self, msg):
@@ -464,4 +468,3 @@ class MAVLinkBridge(object):
             # NOTE: If messages are coming in fast enough, we won't sleep
             if not msg:
                 r.sleep()
-
