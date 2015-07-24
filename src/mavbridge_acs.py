@@ -97,6 +97,16 @@ def pub_status(msg_type, msg, bridge):
     sta.alt_rel = master.field('GLOBAL_POSITION_INT', 'relative_alt', 0)
     sta.as_ok = bridge.check_sensor_health(mavutil.mavlink.MAV_SYS_STATUS_SENSOR_DIFFERENTIAL_PRESSURE)
     sta.as_read = master.field('VFR_HUD', 'airspeed', 0)
+
+    #should return "None" if the FENCE_STATUS message has never been seen:
+    fence_breached = master.field('FENCE_STATUS','breach_status')
+    #also test for the last time a FENCE_STATUS was received --
+    #if not received in a while the fence is disabled.
+    if fence_breached is None or time.time() - handle_fence_status.time > 5:
+        sta.fence_status = apmsg.Status.FENCE_DISABLED
+    else:
+        sta.fence_status = fence_breached
+
     sta.gps_ok = (master.field('GPS_RAW_INT', 'fix_type', 0) == 3)
     sta.gps_sats = master.field('GPS_RAW_INT', 'satellites_visible', 0)
     sta.gps_eph = master.field('GPS_RAW_INT', 'eph', 0)
@@ -110,6 +120,10 @@ def pub_status(msg_type, msg, bridge):
     sta.pwr_batt_vcc = master.field('SYS_STATUS', 'voltage_battery', -1)
     sta.pwr_batt_cur = master.field('SYS_STATUS', 'current_battery', -1)
     pub.publish(sta)
+
+def handle_fence_status(msg_type, msg, bridge):
+    handle_fence_status.time = time.time()
+handle_fence_status.time = 0
 
 #-----------------------------------------------------------------------
 # ROS service handling classes
@@ -472,6 +486,7 @@ def init(bridge):
     # MAVLink events
     bridge.add_mavlink_event("HEARTBEAT", pub_status)
     bridge.add_mavlink_event("GLOBAL_POS_ATT_NED", pub_pose_att_vel)
+    bridge.add_mavlink_event("FENCE_STATUS", handle_fence_status)
 
     # (Fairly) idempotent subscribers
     bridge.add_ros_sub_event("heartbeat_onboard", apmsg.Heartbeat,

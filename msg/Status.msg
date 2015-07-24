@@ -9,6 +9,10 @@ uint8 MODE_LOITER=7
 uint8 MODE_INITIALIZING=8
 uint8 MODE_UNKNOWN=15
 
+uint8 FENCE_NOT_BREACHED=0
+uint8 FENCE_BREACHED=1
+uint8 FENCE_DISABLED=2
+
 Header  header
 uint8   mode
 bool    armed
@@ -16,6 +20,7 @@ bool    ahrs_ok
 int32   alt_rel
 bool    as_ok
 float32 as_read
+uint8   fence_status
 bool    gps_ok
 uint8   gps_sats
 uint16  gps_eph
