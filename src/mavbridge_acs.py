@@ -426,28 +426,16 @@ def sub_change_mode(message, bridge):
     else:
         raise Exception("invalid mode %u" % message.data)
 
-# Purpose: Initiates landing
-# NOTE: Not yet supported in MAVLink master branch
-# Fields: None
+# Purpose: Indicates to autopilot that landing is starting/stopping
+# Fields:
+# .data - Boolean; True=starting, False=stopping
 def sub_landing(message, bridge):
     bridge.get_master().mav.command_long_send(
         bridge.get_master().target_system,
         bridge.get_master().target_component,
         mavutil.mavlink.MAV_CMD_DO_RALLY_LAND,
-        0, 0, 0, 0, 0, 0, 0, 0)
-
-# Purpose: Aborts landing
-# NOTE: Not yet supported in MAVLink master branch
-# Fields: 
-# .data - Altitude to return to (meters, integer)
-def sub_landing_abort(message, bridge):
-    # TODO: Do we need to repeat until we see RTL again??
-    bridge.get_master().mav.command_long_send(
-        bridge.get_master().target_system,
-        bridge.get_master().target_component,
-        mavutil.mavlink.MAV_CMD_DO_GO_AROUND,
         0,
-        message.data, # TODO better to use parameter
+        int(message.data),
         0, 0, 0, 0, 0, 0)
 
 # Purpose: Go to a lat/lon/alt in AUTO mode ordered by payload
@@ -491,8 +479,7 @@ def init(bridge):
     bridge.add_ros_sub_event("heartbeat_ground", apmsg.Heartbeat,
                              sub_heartbeat_ground, log=False)
     bridge.add_ros_sub_event("mode_num", stdmsg.UInt8, sub_change_mode)
-    bridge.add_ros_sub_event("land", stdmsg.Empty, sub_landing)
-    bridge.add_ros_sub_event("land_abort", stdmsg.UInt16, sub_landing_abort)
+    bridge.add_ros_sub_event("set_landing", stdmsg.Bool, sub_landing)
     bridge.add_ros_sub_event("payload_waypoint", apmsg.LLA,
                              sub_payload_waypoint, log=False)
     bridge.add_ros_sub_event("reboot", stdmsg.Empty, sub_reboot)
