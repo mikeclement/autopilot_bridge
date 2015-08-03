@@ -18,6 +18,7 @@ import autopilot_bridge.msg as apmsg
 import autopilot_bridge.srv as apsrv
 import time
 import sys
+from threading import Lock
 
 #-----------------------------------------------------------------------
 # Class to access mavlink waypoints from ROS
@@ -33,6 +34,7 @@ class mavbridge_wp(object):
         self.push_in_progress = False
         self.push_current = -1
         self.timeout = -1
+        self.lock = Lock()
 
     # Return val at array index, or None
     def _get(self, idx):
@@ -155,20 +157,24 @@ class mavbridge_wp(object):
     # Generic handler for a range of waypoints
     # NOTE: default args are what is needed to fetch ALL waypoints
     def _wp_get(self, bridge, low=0, high=-1, last_only=False):
-        # Make sure another service request isn't active
-        if self.fetch_in_progress or self.push_in_progress:
-            return { 'ok' : False, 'points' : [] }
+        # Protect against race setting *_in_progress
+        with self.lock:
+            # Make sure another service request isn't active
+            if self.fetch_in_progress or self.push_in_progress:
+                return { 'ok' : False, 'points' : [] }
 
-        # Clear the old list
-        self._clr()
+            # Clear the old list
+            self._clr()
 
-        # Initialize the retry timeout, THEN change state, THEN request
-        self._reset_to()
-        self.fetch_current = -1
-        self.fetch_lowest = low
-        self.fetch_highest = high
-        self.fetch_last_only = last_only
-        self.fetch_in_progress = True
+            # Initialize the retry timeout, THEN change state
+            self._reset_to()
+            self.fetch_current = -1
+            self.fetch_lowest = low
+            self.fetch_highest = high
+            self.fetch_last_only = last_only
+            self.fetch_in_progress = True
+
+        # Now we can start the fetch
         bridge.get_master().waypoint_request_list_send()
 
         # Wait up to N seconds for transaction to complete
@@ -218,23 +224,27 @@ class mavbridge_wp(object):
 
     # Handle incoming ROS service requests to get all waypoints
     def srv_wp_setall(self, req, bridge):
-        # Make sure another service request isn't active
-        #  and that there's at least one waypoint to push
-        if self.fetch_in_progress or self.push_in_progress \
-                                  or len(req.points) == 0:
-            return { 'ok' : False }
+        # Protect against race setting *_in_progress
+        with self.lock:
+            # Make sure another service request isn't active
+            #  and that there's at least one waypoint to push
+            if self.fetch_in_progress or self.push_in_progress \
+                                    or len(req.points) == 0:
+                return { 'ok' : False }
 
-        # Load waypoints into list
-        self._clr()
-        for w in req.points:
-            self._set(w.seq, (w.frame, w.command, w.current, w.autocontinue,
-                              w.param1, w.param2, w.param3, w.param4,
-                              w.x, w.y, w.z))
+            # Load waypoints into list
+            self._clr()
+            for w in req.points:
+                self._set(w.seq, (w.frame, w.command, w.current, w.autocontinue,
+                                  w.param1, w.param2, w.param3, w.param4,
+                                  w.x, w.y, w.z))
 
-        # Initialize the retry timeout, THEN change state, THEN send count
-        self._reset_to()
-        self.push_current = -1
-        self.push_in_progress = True
+            # Initialize the retry timeout, THEN change state
+            self._reset_to()
+            self.push_current = -1
+            self.push_in_progress = True
+
+        # Now we can start the push
         bridge.get_master().waypoint_count_send(self._cnt())
 
         # Wait up to 5 seconds for transaction to complete
