@@ -33,7 +33,9 @@ mode_mav_to_enum = { 'RTL' : apmsg.Status.MODE_RALLY,
                      'FBWB' : apmsg.Status.MODE_FBWB,
                      'CIRCLE' : apmsg.Status.MODE_CIRCLE,
                      'GUIDED' : apmsg.Status.MODE_GUIDED,
-                     'AUTO' : apmsg.Status.MODE_AUTO }
+                     'AUTO' : apmsg.Status.MODE_AUTO,
+                     'LOITER' : apmsg.Status.MODE_LOITER,
+                     'INITIALIZING' : apmsg.Status.MODE_INITIALIZING}
 mode_enum_to_mav = { v:k for (k,v) in mode_mav_to_enum.items() }
 
 #-----------------------------------------------------------------------
