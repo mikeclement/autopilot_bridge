@@ -70,18 +70,17 @@ class AP_MsgQueue(object):
                     break
 
                 ap_msg = apmsg.AutoPilotMsg()
-                ap_msg.final_seq = self.__curr_seq_num - 1
                 ap_msg.seq = sequence_num
                 ap_msg.text = msg_text
 
                 msgs.append(ap_msg)
-
+            
         #service requires a response
         return { 'msgs' : msgs }
 
 def init(bridge):
     obj = AP_MsgQueue()
     bridge.add_mavlink_event("STATUSTEXT", obj.handle_statustext)
-    bridge.add_ros_srv_event("last_n_ap_msgs", apsrv.ReqPrevNMsgs, 
+    bridge.add_ros_srv_event("ap_msg_queue_last_n", apsrv.ReqPrevNMsgs, 
             obj.get_last_n_msgs)
     return obj

@@ -184,6 +184,13 @@ Strings are those allowable in pymavlink (e.g., "/dev/ttyUSB0,57600" or "udp:127
 See the service and message definitions in autopilot\_bridge for details
 on specifying service requests and using responses.
 
+### ap\_msg\_queue
+
+The 'ap\_msg\_queue' module prvoides a means for storing messages such as STATUSTEXT from the autopilot for later forwarding.  The primary intent is to forward previously received autopilot messages to a ground control station, but only when requested.
+
+* Services
+ * `autopilot/ap_msg_queue_last_n` - Returns the last N message in the queue.  A second parameter is also provided: "since\_seq" which indicates the requestor only would like messages since the indicated sequence number, providing a rudimentary means to prevent forwarding messages the requestor already posseses.
+
 ## Extensibility in mavbridge.py
 
 `mavbridge.py` supports a module system, which attempts to make adding ROS publishers,
