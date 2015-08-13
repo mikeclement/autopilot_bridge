@@ -11,6 +11,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 add_message_files(
   FILES
+  AutoPilotMsg.msg
   Fencepoint.msg
   GeoPoint.msg
   GeoPose.msg
@@ -36,6 +37,7 @@ add_service_files(
   ParamSetList.srv
   RallyGetAll.srv
   RallySetAll.srv
+  ReqPrevNMsgs.srv
   SlaveSetup.srv
   TimedAction.srv
   Version.srv
