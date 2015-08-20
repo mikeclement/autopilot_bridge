@@ -1,1 +1,1 @@
-int32 counter
+uint32 counter
