@@ -107,7 +107,7 @@ def pub_status(msg_type, msg, bridge):
     else:
         sta.fence_status = fence_breached
 
-    sta.gps_ok = (master.field('GPS_RAW_INT', 'fix_type', 0) == 3)
+    sta.gps_ok = (master.field('GPS_RAW_INT', 'fix_type', 0) >= 3)
     sta.gps_sats = master.field('GPS_RAW_INT', 'satellites_visible', 0)
     sta.gps_eph = master.field('GPS_RAW_INT', 'eph', 0)
     sta.ins_ok = bridge.check_sensor_health(mavutil.mavlink.MAV_SYS_STATUS_SENSOR_3D_ACCEL | \
