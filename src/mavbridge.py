@@ -194,7 +194,7 @@ if __name__ == '__main__':
                                serial_relief=args.serial_relief,
                                spam_mavlink=args.spam_mavlink)
     except Exception as ex:
-        print ex.args[0]
+        print str(ex)
         sys.exit(-1)
 
     # Register Standard MAVLink events
@@ -226,7 +226,7 @@ if __name__ == '__main__':
                 bridge.add_module(m, m_obj)
                 print "Module '%s' loaded successfully" % m_name
             except Exception as ex:
-                print "Failed to load module '%s': %s" % (m_name, str(ex.args[0]))
+                print "Failed to load module '%s': %s" % (m_name, str(ex))
 
     # Start loop (this won't return until we terminate or ROS shuts down)
     print "Starting autopilot bridge loop...\n"

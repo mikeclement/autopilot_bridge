@@ -83,13 +83,13 @@ class MAVLinkBridge(object):
         try:
             rospy.init_node(basename)
         except Exception as ex:
-            raise Exception("ROS init error: " + ex.args[0])
+            raise Exception("ROS init error: " + str(ex))
 
         # Initialize mavlink connection
         try:
             self._initialize(sync_local_clock)
         except Exception as ex:
-            raise Exception("MAVLink init error: " + str(ex.args[0]))
+            raise Exception("MAVLink init error: " + str(ex))
 
     # Add in handlers from a module file
     # NOTE: Must be an object, perhaps loaded using __import__() / reload()
@@ -149,7 +149,7 @@ class MAVLinkBridge(object):
                 self._ros_pubs[topic] = (topic_type, pub)
                 return pub
             except Exception as ex:
-                raise Exception("failed to create topic %s: %s" % (topic, ex.args[0]))
+                raise Exception("failed to create topic %s: %s" % (topic, str(ex)))
 
     ### Add handlers of various sorts ###
 
@@ -180,7 +180,7 @@ class MAVLinkBridge(object):
                     if log:
                         rospy.loginfo("ROS sub recvd: %s" % topic)
                 except Exception as ex:
-                    rospy.logwarn("ROS sub error (%s): %s" % (topic, ex.args[0]))
+                    rospy.logwarn("ROS sub error (%s): %s" % (topic, str(ex)))
                 return True
             self._ros_sub_events[topic] = \
                 rospy.Subscriber("%s/%s"%(self._basename, topic),
@@ -205,7 +205,7 @@ class MAVLinkBridge(object):
                         rospy.loginfo("ROS srv recvd: %s" % srv_name)
                     return callback(req, self)
                 except Exception as ex:
-                    rospy.logwarn("ROS srv error (%s): %s" % (srv_name, ex.args[0]))
+                    rospy.logwarn("ROS srv error (%s): %s" % (srv_name, str(ex)))
                 # TODO: return something the caller can handle
                 return True
             self._ros_srv_events[srv_name] = \
@@ -235,7 +235,7 @@ class MAVLinkBridge(object):
             try:
                 self._mainloop()
             except Exception as ex:
-                rospy.logwarn("MAVLinkBridge loop restart: " + str(ex.args[0]))
+                rospy.logwarn("MAVLinkBridge loop restart: " + str(ex))
 
     #----------------------------------------------------------------------#
     ### Internals ###
@@ -279,7 +279,7 @@ class MAVLinkBridge(object):
                     int(self._baudrate),
                     autoreconnect=True)
             except Exception as ex:
-                rospy.logwarn("MAVLinkBridge: " + str(ex.args[0]))
+                rospy.logwarn("MAVLinkBridge: " + str(ex))
 
             # If succeeded, move on to rest of init
             break
@@ -398,7 +398,7 @@ class MAVLinkBridge(object):
                 ev(msg_type, msg, self)
             except Exception as ex:
                 rospy.logwarn("MAVLink wildcard event error (%s): %s" % \
-                              (msg_type, ex.args[0]))
+                              (msg_type, str(ex)))
 
         # Run any type-specific events
         if msg_type not in self._mav_events:
@@ -408,7 +408,7 @@ class MAVLinkBridge(object):
                 ev(msg_type, msg, self)
             except Exception as ex:
                 rospy.logwarn("MAVLink event error (%s): %s" % \
-                              (msg_type, ex.args[0]))
+                              (msg_type, str(ex)))
 
     # Handle timed events
     def _handle_timed(self, t=None):
@@ -432,7 +432,7 @@ class MAVLinkBridge(object):
             if waiting > maxbytes:
                 self._master.port.read(waiting - maxbytes)
         except Exception as ex:
-            rospy.logwarn("Serial relief error: " + str(ex.args[0]))
+            rospy.logwarn("Serial relief error: " + str(ex))
 
     # Main loop that receives and handles mavlink messages
     def _mainloop(self):
@@ -449,8 +449,8 @@ class MAVLinkBridge(object):
             try:
                 msg = self._master.recv_match(blocking=False)
             except Exception as ex:
-                rospy.logwarn("MAV Recv error: " + str(ex.args[0]))
-                ex_msg = str(ex.args[0])
+                rospy.logwarn("MAV Recv error: " + str(ex))
+                ex_msg = str(ex)
 
             # Do additional error handling
             if ex_msg and 'device disconnected' in ex_msg:

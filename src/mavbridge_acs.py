@@ -195,7 +195,7 @@ class Calibrations(object):
                 if self._finished:
                     break
         except Exception as ex:
-            rospy.logwarn("Calibration exception: " + str(ex.args[0]))
+            rospy.logwarn("Calibration exception: " + str(ex))
         finally:
             # Release for other users to re-calibrate
             with self._lock:
@@ -294,7 +294,7 @@ class Demos(object):
             self._pwm_reset()  # Undo overrides
             self._pwm_send()
         except Exception as ex:
-            rospy.logwarn("Demo exception: " + str(ex.args[0]))
+            rospy.logwarn("Demo exception: " + str(ex))
         finally:
             # Release for other users to demo
             with self._lock:

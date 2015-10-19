@@ -59,7 +59,7 @@ class mavbridge_slave(object):
                         bridge.get_master().write(m.get_msgbuf())
             except Exception:
                 rospy.logwarn("Error processing message from slave %s: %s" \
-                              % (s, ex.args[0]))
+                              % (s, str(ex)))
 
     # Handle services requests to open/close slave channels
     # Channels can be specified in a few ways, including:
@@ -86,7 +86,7 @@ class mavbridge_slave(object):
                                                input=False)
             except Exception as ex:
                 rospy.logwarn("Error creating slave channel '%s': %s" \
-                              % (req.channel, ex.args[0]))
+                              % (req.channel, str(ex)))
                 return { 'ok' : False }
             return { 'ok' : True }
 

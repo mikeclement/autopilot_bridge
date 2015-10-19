@@ -47,7 +47,7 @@ class mavbridge_file(object):
             # Create a request object (NOTE: hackish, relies on service impl)
             req = srv_type._request_class()
         except Exception as ex:
-            rospy.logwarn("Loader: service setup error: " + str(ex.args[0]))
+            rospy.logwarn("Loader: service setup error: " + str(ex))
             return { 'ok' : False }
 
         try:
@@ -66,7 +66,7 @@ class mavbridge_file(object):
             res = srv(req)
             return { 'ok' : res.ok }
         except Exception as ex:
-            rospy.logwarn("Loader: service call error: " + str(ex.args[0]))
+            rospy.logwarn("Loader: service call error: " + str(ex))
             return { 'ok' : False }
 
     ''' Type-specific parsers '''
