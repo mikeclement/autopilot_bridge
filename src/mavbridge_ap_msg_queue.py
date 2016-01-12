@@ -1,15 +1,21 @@
-"""
-AP_MsgQueue
-
-Module of ROS-MAVLink Bridge
-
-Class holding a set of messages received from the autopilot that later can be
-forwarded to a ground control station.  Currently only holding STATUSTEXT msgs,
-but may add more in the future. Only the last 100 messages are stored.
-
-Author: Michael Day
-Date: Aug 2015
-"""
+#!/usr/bin/env python
+#
+# mavbridge_ap_msg_queue.py - Autopilot message queue
+#
+#Written in 2015 by the Advanced Robotic Systems Engineering Laboratory at the
+#U.S. Naval Postgraduate School, Monterey, California, USA.
+#
+#Pursuant to 17 USC 105, this work is not subject to copyright in the
+#United States and is in the public domain.
+#
+#THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+#REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+#AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+#INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+#LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+#OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+#PERFORMANCE OF THIS SOFTWARE.
+#
 
 import rospy
 
